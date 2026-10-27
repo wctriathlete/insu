@@ -4,7 +4,7 @@
 // prose, with a freshness window + plausibility bounds, and THROW on any failure
 // so the poller skips the write rather than storing a bad price. No fallback source.
 const AGN_URL =
-  'https://agn.gt/wp-json/wp/v2/posts?search=precios%20combustibles&per_page=5&orderby=date'
+  'https://agn.gt/wp-json/wp/v2/posts?search=precios%20combustibles&per_page=10&orderby=date'
 
 const FRESH_DAYS = 14
 const FETCH_TIMEOUT_MS = 30_000
@@ -36,8 +36,8 @@ export function parseRegularPriceGTQ(html: string): number | null {
     .replace(/&#x?[0-9a-f]+;/gi, ' ')
     .replace(/\s+/g, ' ')
   const patterns = [
-    // "31.09 para la regular" / "31.09 quetzales para la gasolina regular"
-    /(\d{2}\.\d{2})\s*(?:quetzales?\s+)?para\s+la\s+(?:gasolina\s+)?regular/i,
+    // "31.09 para la regular" / "31.09 quetzales para la gasolina regular" / "31.69 la regular"
+    /(\d{2}\.\d{2})\s*(?:quetzales?\s+)?(?:para\s+)?la\s+(?:gasolina\s+)?regular/i,
     // "la regular en Q40.09" / "regular Q40.09"
     /(?:la\s+)?regular\s+(?:en\s+)?Q?\s*(\d{2}\.\d{2})/i,
   ]
@@ -51,12 +51,17 @@ export function parseRegularPriceGTQ(html: string): number | null {
   return null
 }
 
-/** Most recent AGN post that is the weekly price series AND within the freshness window. */
+// Content phrases that announce absolute price levels (not deltas). A post qualifies
+// by its series title OR by one of these in its body; ordinary fuel news does not.
+const LEVEL_PHRASES = /dejando\s+los\s+precios\s+en|quedaron\s+los\s+precios|precio\s+de\s+referencia/i
+
+/** Most recent AGN post that announces price levels AND is within the freshness window. */
 export function pickFreshPricePost(posts: AgnPost[], nowMs: number): AgnPost | null {
   const maxAgeMs = FRESH_DAYS * 86_400_000
   for (const p of posts) {
     const title = (p.title?.rendered ?? '').toLowerCase()
-    const isSeries = title.includes('quedaron los precios')
+    const isSeries =
+      title.includes('quedaron los precios') || LEVEL_PHRASES.test(p.content?.rendered ?? '')
     const publishedMs = Date.parse(p.date_gmt.endsWith('Z') ? p.date_gmt : `${p.date_gmt}Z`)
     const fresh = Number.isFinite(publishedMs) && nowMs - publishedMs <= maxAgeMs
     if (isSeries && fresh) return p
