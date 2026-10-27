@@ -6,16 +6,13 @@ price moves), an oracle checks the trigger, and payouts fire automatically
 with no claims process. Mexico is the primary demo market; capital providers
 fund the payout pool and keep premiums as yield when a trigger doesn't fire.
 
-## Status — paused
+## Status — active
 
-Development of this project is **on hold** by Nacho's decision. It is listed
-in `machine-config/devbrain-projects.excluded` as `insu # en pausa, pendiente
-el "dale" explicito de Nacho` and is deliberately absent from
-`devbrain-projects.allow`, so it never runs unattended. The last commit
-before this file was written is from 2026-07-22 — nearly a month of
-inactivity, consistent with the hold. **Do not propose or start feature
-work, refactors, or dependency upgrades here unless Nacho raises it
-himself.** Documentation and hygiene changes only.
+Development resumed on 2026-10-26 at Nacho's explicit go-ahead, after a hold
+from 2026-07-22 to 2026-10-26. Interactive work with Nacho is in scope again
+(features, fixes, recalibrations). Unattended runs are still governed by
+`machine-config/devbrain-projects.{allow,excluded}`, so check there before
+assuming automated jobs may touch this repo.
 
 ## Stack
 
@@ -64,8 +61,9 @@ a real, populated flat config, already wired to `eslint-config-next`.
 
 ## Hard rules
 
-- **Paused means paused.** See Status above — verify against
-  `machine-config/devbrain-projects.excluded` before assuming otherwise.
+- **Unattended runs follow machine-config.** See Status above: interactive
+  work is active, but automated agents check
+  `machine-config/devbrain-projects.{allow,excluded}` first.
 - **Never deploy to production.** `vercel.json` and ONBOARDING.md both note
   deploys are manual (`vercel --prod --yes`) with GitHub auto-deploy NOT
   wired up — previews only, and only if Nacho asks for one.
@@ -74,8 +72,7 @@ a real, populated flat config, already wired to `eslint-config-next`.
   exist and are real). Never log, print, or commit Stripe secrets, webhook
   signing secrets, or Supabase service-role keys.
 - **The known PriceChart test failures above are pre-existing** — don't
-  "fix" them as a drive-by; that's feature/bugfix work, which is out of
-  scope while the project is paused.
+  "fix" them as a drive-by; fix them deliberately in their own change.
 
 ## Where to learn more
 
