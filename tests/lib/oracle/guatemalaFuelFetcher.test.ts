@@ -10,6 +10,10 @@ vi.stubGlobal('fetch', mockFetch)
 
 const nowMs = Date.parse('2026-07-22T12:00:00Z')
 
+// Real AGN post 2026-10-26: MEM level reported in prose, delta + exemption savings nearby.
+const OCT26_TITLE = 'Ministerio de Energía y Minas reportó disminución de los precios en los combustibles en el país'
+const OCT26_CONTENT = '<p>Ciudad de Guatemala, 26 oct (AGN). – El Ministerio de Energía y Minas (MEM), informó que este domingo 25 de octubre se reportó una disminución en los precios de los combustibles en el país. En la gasolina superior fue una reducción superior a un quetzal y en la gasolina regular de 1.30 . Dejando los precios en 34.19 la superior , 31.69 la regular y el diésel en 42.69 quetzales por galón.</p><p>Con base en los precios monitoreados el 28 de septiembre, el ahorro por galón puede alcanzar Q9.05 en la gasolina superior , Q8.33 en la regular y Q6.45 en el diésel .</p>'
+
 function post(overrides: Partial<{ title: string; content: string; date_gmt: string }> = {}) {
   return {
     title: { rendered: overrides.title ?? 'Así quedaron los precios de los combustibles para esta semana' },
@@ -39,6 +43,9 @@ describe('parseRegularPriceGTQ', () => {
     const delta = 'incrementos de 50 centavos por galón en la superior, 49 centavos por galón en la regular y un quetzal 96 centavos en el diésel.'
     expect(parseRegularPriceGTQ(delta)).toBeNull()
   })
+  it('extracts regular from the "Dejando los precios en X la superior, Y la regular" phrasing', () => {
+    expect(parseRegularPriceGTQ(OCT26_CONTENT)).toBeCloseTo(31.69, 2)
+  })
 })
 
 describe('pickFreshPricePost', () => {
@@ -57,6 +64,15 @@ describe('pickFreshPricePost', () => {
   it('rejects a news article whose title lacks the price-series phrase', () => {
     const off = post({ title: 'Tensiones geopolíticas internacionales impactan precios de combustibles' })
     expect(pickFreshPricePost([off], nowMs)).toBeNull()
+  })
+  it('accepts a MEM-report post whose content announces the price levels', () => {
+    const p = pickFreshPricePost([post({ title: OCT26_TITLE, content: OCT26_CONTENT, date_gmt: '2026-07-21T17:00:41' })], nowMs)
+    expect(p).not.toBeNull()
+  })
+  it('skips a newer unrelated post and picks the level-announcing one behind it', () => {
+    const news = post({ title: 'Feria del Agricultor pondrá a disposición productos', content: '<p>Fiambre.</p>', date_gmt: '2026-07-21T18:00:00' })
+    const mem = post({ title: OCT26_TITLE, content: OCT26_CONTENT, date_gmt: '2026-07-21T17:00:41' })
+    expect(pickFreshPricePost([news, mem], nowMs)?.title.rendered).toBe(OCT26_TITLE)
   })
   it('accepts a fresh post whose date_gmt already ends in Z', () => {
     const p = pickFreshPricePost([post({ date_gmt: '2026-07-21T06:00:00Z' })], nowMs)
@@ -83,6 +99,12 @@ describe('fetchGuatemalaFuelPrice', () => {
     expect(r.value.gas_price_quetzales).toBeCloseTo(40.09, 2)
     expect(r.value.fuel_type).toBe('regular')
     expect(r.value.reference_week).toBe('2026-07-21')
+  })
+
+  it('reads the regular level from a real MEM-report post (2026-10-26 phrasing)', async () => {
+    mockAgn([post({ title: OCT26_TITLE, content: OCT26_CONTENT, date_gmt: '2026-07-21T17:00:41' })])
+    const r = await fetchGuatemalaFuelPrice('regular')
+    expect(r.value.gas_price_quetzales).toBeCloseTo(31.69, 2)
   })
 
   it('throws when there is no fresh price post', async () => {
