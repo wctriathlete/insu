@@ -1,6 +1,5 @@
-'use server'
-
 import { createServiceClient } from '@/lib/supabase/server'
+import { checkAdmin } from '@/lib/auth/admin'
 import { buildUserActivity, type UserActivity, type ActivityInputs } from '@/lib/admin/activity'
 
 /**
@@ -9,6 +8,11 @@ import { buildUserActivity, type UserActivity, type ActivityInputs } from '@/lib
  * no user_id, so they are joined through hedger_positions.user_id.
  */
 export async function getUserActivity(): Promise<UserActivity[]> {
+  // Not a server action (no 'use server'): it was registered as a public
+  // endpoint with no check of its own. It now verifies admin + MFA itself.
+  const admin = await checkAdmin()
+  if (!admin.ok) throw new Error(admin.reason)
+
   const db = createServiceClient()
 
   const [profilesRes, buysRes, depositsRes, payoutsRes, usersRes] = await Promise.all([

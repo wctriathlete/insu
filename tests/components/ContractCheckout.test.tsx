@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import ContractCheckout, { type DetailBundle } from '@/components/markets/ContractCheckout'
 import type { ContractDetailData, CoverageTier } from '@/lib/types'
 
-const mocks = vi.hoisted(() => ({ push: vi.fn(), createIntent: vi.fn() }))
+const mocks = vi.hoisted(() => ({ push: vi.fn(), createIntent: vi.fn(), activate: vi.fn() }))
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mocks.push, refresh: vi.fn() }),
@@ -12,12 +12,17 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/actions/purchase', () => ({
   createHedgerPaymentIntent: mocks.createIntent,
-  activatePositionByPaymentIntent: vi.fn(),
+  activatePositionByPaymentIntent: mocks.activate,
 }))
 vi.mock('@/lib/actions/launch-interest', () => ({ toggleLaunchInterest: vi.fn().mockResolvedValue(true) }))
 vi.mock('@/components/markets/CorridorMap', () => ({ CorridorMap: () => <div data-testid="map" /> }))
 vi.mock('@/components/markets/StripePaymentForm', () => ({
-  default: ({ amountLabel }: { amountLabel: string }) => <div data-testid="stripe">{amountLabel}</div>,
+  default: ({ amountLabel, onSuccess }: { amountLabel: string; onSuccess: () => void }) => (
+    <div data-testid="stripe">
+      {amountLabel}
+      <button onClick={onSuccess}>stripe-pay</button>
+    </div>
+  ),
 }))
 
 function tier(over: Partial<CoverageTier>): CoverageTier {
@@ -79,6 +84,7 @@ describe('ContractCheckout', () => {
   beforeEach(() => {
     mocks.push.mockClear()
     mocks.createIntent.mockReset()
+    mocks.activate.mockReset()
   })
 
   it('shows the plain condition, never the stored question title or raw trigger', () => {
@@ -125,6 +131,18 @@ describe('ContractCheckout', () => {
     expect(mocks.createIntent).toHaveBeenCalledWith('basic', 7)
     expect(await screen.findByTestId('stripe')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cambiar elección' })).toBeInTheDocument()
+  })
+
+  it('says the payment is being confirmed, not failed, while it is still processing', async () => {
+    mocks.createIntent.mockResolvedValue({ clientSecret: 'pi_1_secret_2', expiresAt: '2026-11-14T00:00:00Z' })
+    mocks.activate.mockResolvedValue({ pending: true })
+    renderCheckout()
+    await userEvent.click(screen.getByRole('button', { name: 'Proteger 7 días' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'stripe-pay' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Tu pago se está confirmando')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    // Paid once already — no second card form to pay again.
+    expect(screen.queryByTestId('stripe')).not.toBeInTheDocument()
   })
 
   it('translates server errors by code', async () => {

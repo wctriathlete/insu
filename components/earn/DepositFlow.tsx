@@ -37,6 +37,7 @@ export default function DepositFlow({ contract, userId }: { contract: ContractWi
   const [clientSecret, setClientSecret] = useState<string | null>(null)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const value = Number(amount)
@@ -74,6 +75,11 @@ export default function DepositFlow({ contract, userId }: { contract: ContractWi
   async function onPaid() {
     if (!clientSecret) return
     const result = await activatePositionByPaymentIntent(clientSecret)
+    if ('pending' in result) {
+      // Paid but not yet settled — the webhook activates it once it clears.
+      setPending(true)
+      return
+    }
     if ('error' in result) {
       setError(t('payment.activationError'))
       return
@@ -213,7 +219,9 @@ export default function DepositFlow({ contract, userId }: { contract: ContractWi
 
       {error && <Alert tone="danger">{error}</Alert>}
 
-      {clientSecret ? (
+      {pending ? (
+        <Alert tone="info">{t('payment.confirming')}</Alert>
+      ) : clientSecret ? (
         <StripePaymentForm clientSecret={clientSecret} amountLabel={label} onSuccess={onPaid} />
       ) : (
         <Button size="main" block disabled={!valid || !accepted || !tierId || loading} onClick={start}>

@@ -268,6 +268,7 @@
     "declined": "Your card didn't go through. We didn't charge you anything.",
     "change": "Change selection",
     "activationError": "We received your payment but couldn't activate the protection. Write to us and we'll sort it out.",
+    "confirming": "Your payment is being confirmed. We'll activate it as soon as it clears — nothing else to do.",
     "tryAgainPay": "Try again · {amount}"
   },
   "confirm": {

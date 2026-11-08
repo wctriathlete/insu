@@ -249,7 +249,7 @@ export async function createProviderPaymentIntent(
 
 export async function activatePositionByPaymentIntent(
   clientSecret: string,
-): Promise<{ ok: true; positionId: string } | { error: string }> {
+): Promise<{ ok: true; positionId: string } | { pending: true } | { error: string }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Unauthorized' }
@@ -265,7 +265,11 @@ export async function activatePositionByPaymentIntent(
   } catch {
     return { error: 'Could not verify payment' }
   }
-  if (pi.status !== 'succeeded' && pi.status !== 'processing') {
+  // Only a settled payment activates. 'processing' (e.g. bank debits) can
+  // still fail, so it stays pending here and the Stripe webhook activates the
+  // position on payment_intent.succeeded.
+  if (pi.status === 'processing') return { pending: true }
+  if (pi.status !== 'succeeded') {
     return { error: `Payment not confirmed (status: ${pi.status})` }
   }
 

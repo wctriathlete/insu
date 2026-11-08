@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/server'
 import { ContractForm } from '@/components/admin/contracts/ContractForm'
 import type { Category, ContractWithTiers } from '@/lib/types'
+import { checkAdmin } from '@/lib/auth/admin'
 
 export default async function EditContractPage({
   params,
@@ -9,6 +10,10 @@ export default async function EditContractPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
+  // Admin + MFA checked here, not just in the layout: Next renders this page
+  // and ships its data even when the layout swaps in the MFA gate.
+  if (!(await checkAdmin()).ok) return null
+
   const supabase = createServiceClient()
 
   const categoriesResult = await supabase.from('categories').select('*').order('display_order')
