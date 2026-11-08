@@ -1,14 +1,15 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import Header from '@/components/layout/Header'
-import ContractDetailClient from '@/components/markets/ContractDetailClient'
-import { CorridorEvidence } from '@/components/markets/CorridorEvidence'
-import { CorridorMarketView } from '@/components/markets/CorridorMarketView'
-import { getContractPeriod, type PeriodBundle } from '@/lib/corridors'
-import type { ContractDetailData, LatestOracleReading, OracleReading, Corridor } from '@/lib/types'
+import ContractDetail from '@/components/markets/ContractDetail'
+import ComingSoonScreen from '@/components/markets/ComingSoonScreen'
+import type { DetailBundle } from '@/components/markets/ContractCheckout'
+import type { ContractDetailData, LatestOracleReading, Corridor } from '@/lib/types'
 import type { DisplayMode } from '@/lib/currency/config'
 import { aggregateDailyOracleSeries, type DailyMetricPoint } from '@/lib/oracle/dailySeries'
 
+// `*` (not an explicit column list) keeps this query valid before and after
+// the Sereno naming migration adds columns.
 const CONTRACT_SELECT = `
   *,
   category:categories(*),
@@ -17,11 +18,10 @@ const CONTRACT_SELECT = `
   corridor:corridors(*)
 `
 
-/** Fetch ~30 days of readings and reduce to a daily in-window-max metric series. */
-async function loadOracleSeries(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  contract: ContractDetailData,
-): Promise<DailyMetricPoint[]> {
+type Supabase = Awaited<ReturnType<typeof createClient>>
+
+/** ~30 days of readings reduced to a daily in-window-max metric series. */
+async function loadOracleSeries(supabase: Supabase, contract: ContractDetailData): Promise<DailyMetricPoint[]> {
   const tc = contract.trigger_condition as Record<string, unknown>
   const metric = typeof tc.metric === 'string' ? tc.metric : null
   if (!metric) return []
@@ -42,21 +42,17 @@ async function loadOracleSeries(
 
   const corridor = contract.corridor as Corridor | null
   const timeWindow = corridor ? { start: corridor.window_start, end: corridor.window_end } : null
+  // The 30×24h cutoff touches 31 calendar days; keep the last 30 so the
+  // "Se activó N … en los últimos 30 días" line says what it counts.
   return aggregateDailyOracleSeries(
     (data ?? []) as { read_at: string; value: Record<string, unknown> }[],
     metric,
     timeWindow,
-  )
+  ).slice(-30)
 }
 
-/** Load the oracle readings for one corridor contract into a renderable bundle. */
-async function loadBundle(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  contract: ContractDetailData,
-): Promise<PeriodBundle> {
-  const corridor = contract.corridor as Corridor
-
-  const [latestReadingResult, sparklineResult, metricSeries] = await Promise.all([
+async function loadBundle(supabase: Supabase, contract: ContractDetailData): Promise<DetailBundle> {
+  const [latest, metricSeries] = await Promise.all([
     supabase
       .from('oracle_readings')
       .select('value, read_at, source, trigger_met')
@@ -64,172 +60,95 @@ async function loadBundle(
       .order('read_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from('oracle_readings')
-      .select('*')
-      .eq('contract_id', contract.id)
-      .order('read_at', { ascending: false })
-      .limit(6),
     loadOracleSeries(supabase, contract),
   ])
-
-  if (latestReadingResult.error) {
-    console.error('[MarketPage] oracle fetch failed:', latestReadingResult.error.message)
-  }
-  if (sparklineResult.error) {
-    console.error('[MarketPage] sparkline fetch failed:', sparklineResult.error.message)
-  }
-
+  if (latest.error) console.error('[MarketPage] oracle fetch failed:', latest.error.message)
   return {
-    period: getContractPeriod(corridor),
     slug: contract.slug,
     contract,
-    corridor,
-    latestReading: latestReadingResult.data as LatestOracleReading | null,
-    sparklineReadings: (sparklineResult.data ?? []) as OracleReading[],
+    latestReading: (latest.data ?? null) as LatestOracleReading | null,
     metricSeries,
   }
 }
 
 export default async function MarketPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>
+  searchParams: Promise<{ period?: string; tier?: string; checkout?: string }>
 }) {
   const { slug } = await params
-  const isConfigured = !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  )
+  const query = await searchParams
+  const isConfigured = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   if (!isConfigured) notFound()
 
   const supabase = await createClient()
-
   const [contractResult, userResult] = await Promise.all([
     supabase.from('contracts').select(CONTRACT_SELECT).eq('slug', slug).in('status', ['active', 'settled']).single(),
     supabase.auth.getUser(),
   ])
+  if (contractResult.error || !contractResult.data) notFound()
 
-  const contractData = contractResult.data
-  if (contractResult.error || !contractData) notFound()
-
-  const contract = contractData as unknown as ContractDetailData
+  const contract = contractResult.data as unknown as ContractDetailData
   const userId = userResult.data.user?.id ?? null
 
   let displayMode: DisplayMode = 'USD'
+  let interested = false
   if (userId) {
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('preferred_currency')
-      .eq('id', userId)
-      .single()
-    displayMode = prof?.preferred_currency === 'LOCAL' ? 'LOCAL' : 'USD'
-  }
-  const corridor = contract.corridor as Corridor | null
-  const comingSoon = contract.launch_stage === 'coming_soon'
-
-  // For a corridor contract, find its sibling (same road, opposite period).
-  let sibling: ContractDetailData | null = null
-  if (contract.trigger_type === 'urban' && corridor) {
-    const { data: roadCorridors } = await supabase
-      .from('corridors')
-      .select('id')
-      .eq('road', corridor.road)
-
-    const siblingCorridorId = ((roadCorridors ?? []) as { id: string }[])
-      .map((c) => c.id)
-      .find((id) => id !== corridor.id)
-
-    if (siblingCorridorId) {
-      const { data: siblingData } = await supabase
-        .from('contracts')
-        .select(CONTRACT_SELECT)
-        .eq('corridor_id', siblingCorridorId)
-        .in('status', ['active', 'settled'])
-        .maybeSingle()
-      if (siblingData) sibling = siblingData as unknown as ContractDetailData
-    }
-  }
-
-  // Paired corridor: preload both periods, toggle instantly client-side.
-  // coming-soon corridors (none today) must fall through to the notify-me view
-  if (contract.trigger_type === 'urban' && corridor && sibling && !comingSoon) {
-    const [openedBundle, siblingBundle] = await Promise.all([
-      loadBundle(supabase, contract),
-      loadBundle(supabase, sibling),
+    const [prof, interest] = await Promise.all([
+      supabase.from('profiles').select('preferred_currency').eq('id', userId).single(),
+      supabase.from('launch_interest').select('contract_id').eq('contract_id', contract.id).eq('user_id', userId).maybeSingle(),
     ])
+    displayMode = prof.data?.preferred_currency === 'LOCAL' ? 'LOCAL' : 'USD'
+    interested = !!interest.data
+  }
+
+  if (contract.launch_stage === 'coming_soon') {
+    // "Muy pronto" is always a dark screen (handoff §6.11).
     return (
-      <>
-        <Header />
-        <CorridorMarketView
-          bundles={[openedBundle, siblingBundle]}
-          initialPeriod={getContractPeriod(corridor)}
-          userId={userId}
-        />
-      </>
+      <div data-theme="dark" className="min-h-screen bg-bg">
+        <Header back={{ href: '/' }} hideSearch />
+        <ComingSoonScreen contract={contract} userId={userId} initiallyInterested={interested} />
+      </div>
     )
   }
 
-  // Single contract: non-corridor, or a road with only one active period.
-  const [latestReadingResult, sparklineResult, interestResult, metricSeries] = await Promise.all([
-    supabase
-      .from('oracle_readings')
-      .select('value, read_at, source, trigger_met')
-      .eq('contract_id', contract.id)
-      .order('read_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    contract.trigger_type === 'urban'
-      ? supabase
-          .from('oracle_readings')
-          .select('*')
-          .eq('contract_id', contract.id)
-          .order('read_at', { ascending: false })
-          .limit(6)
-      : Promise.resolve({ data: null, error: null }),
-    comingSoon && userId
-      ? supabase
-          .from('launch_interest')
-          .select('contract_id')
-          .eq('contract_id', contract.id)
-          .eq('user_id', userId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    loadOracleSeries(supabase, contract),
-  ])
-
-  if (latestReadingResult.error) {
-    console.error('[MarketPage] oracle fetch failed:', latestReadingResult.error.message)
-  }
-  if (sparklineResult.error) {
-    console.error('[MarketPage] sparkline fetch failed:', sparklineResult.error.message)
+  // Corridor pairs: preload the opposite window so Mañana · Tarde swaps instantly.
+  const corridor = contract.corridor as Corridor | null
+  let sibling: ContractDetailData | null = null
+  if (contract.trigger_type === 'urban' && corridor) {
+    const { data: roadCorridors } = await supabase.from('corridors').select('id').eq('road', corridor.road)
+    const siblingCorridorId = ((roadCorridors ?? []) as { id: string }[]).map((c) => c.id).find((id) => id !== corridor.id)
+    if (siblingCorridorId) {
+      const { data } = await supabase
+        .from('contracts')
+        .select(CONTRACT_SELECT)
+        .eq('corridor_id', siblingCorridorId)
+        .eq('status', 'active')
+        .neq('launch_stage', 'coming_soon')
+        .maybeSingle()
+      if (data) sibling = data as unknown as ContractDetailData
+    }
   }
 
-  const latestReading = latestReadingResult.data as LatestOracleReading | null
-  const sparklineReadings = (sparklineResult.data ?? []) as OracleReading[]
-  const triggerCondition = contract.trigger_condition
-  const initiallyInterested = !!interestResult.data
+  const bundles = await Promise.all([contract, ...(sibling ? [sibling] : [])].map((c) => loadBundle(supabase, c)))
+  const periodDays = Number(query.period)
 
   return (
     <>
-      <Header />
-      <ContractDetailClient
-        contract={contract}
+      <Header back={{ href: '/' }} hideSearch />
+      <ContractDetail
+        bundles={bundles}
+        initialSlug={contract.slug}
         userId={userId}
-        latestReading={latestReading}
-        comingSoon={comingSoon}
-        initiallyInterested={initiallyInterested}
         displayMode={displayMode}
-        metricSeries={metricSeries}
-        evidence={
-          contract.trigger_type === 'urban' && corridor ? (
-            <CorridorEvidence
-              corridor={corridor}
-              readings={sparklineReadings}
-              triggerCondition={triggerCondition}
-            />
-          ) : undefined
-        }
+        watchingCapacity={interested}
+        initial={{
+          periodDays: Number.isFinite(periodDays) && periodDays > 0 ? periodDays : undefined,
+          tierId: query.tier || undefined,
+          checkout: query.checkout === '1',
+        }}
       />
     </>
   )

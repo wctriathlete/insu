@@ -29,7 +29,7 @@ export function CancelMarketButton({ contractId, title }: { contractId: string; 
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className="text-[13px] text-red-400 hover:text-red-300 disabled:opacity-60"
+      className="text-[13px] text-danger hover:text-danger disabled:opacity-60"
     >
       {isPending ? 'Cancelling…' : 'Cancel'}
     </button>

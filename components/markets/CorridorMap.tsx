@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { setOptions, importLibrary } from '@googlemaps/js-api-loader'
 
 declare global {
@@ -10,14 +11,19 @@ declare global {
   }
 }
 
+const LIGHT_STYLE: google.maps.MapTypeStyle[] = [
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+]
+
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a2e' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373769' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c6e' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
+  { elementType: 'geometry', stylers: [{ color: '#16213a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#a9b7d0' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#16213a' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#243354' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#2b3b5e' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3b4b70' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0d1526' }] },
   { featureType: 'poi', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
 ]
@@ -29,16 +35,17 @@ export function CorridorMap({
   originLng,
   destLat,
   destLng,
-  corridorName,
+  routeName,
   pathPolyline,
 }: {
   originLat: number
   originLng: number
   destLat: number
   destLng: number
-  corridorName: string
+  routeName: string
   pathPolyline?: string | null
 }) {
+  const t = useTranslations('map')
   const mapRef = useRef<HTMLDivElement>(null)
   const [mapState, setMapState] = useState<MapState>('loading')
 
@@ -81,6 +88,15 @@ export function CorridorMap({
       const midLat = (originLat + destLat) / 2
       const midLng = (originLng + destLng) / 2
 
+      // Follow the page theme: Google's default look in light, a navy style in dark.
+      const rootTheme = document.documentElement.dataset.theme
+      const dark =
+        rootTheme === 'dark' ||
+        (rootTheme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      const css = getComputedStyle(document.documentElement)
+      const sky = css.getPropertyValue('--sky').trim() || '#2F6FE4'
+      const ink = css.getPropertyValue('--ink').trim() || '#14213D'
+
       const map = new Map(mapRef.current, {
         center: { lat: midLat, lng: midLng },
         zoom: 12,
@@ -89,7 +105,7 @@ export function CorridorMap({
         streetViewControl: false,
         fullscreenControl: false,
         mapTypeControl: false,
-        styles: DARK_STYLE,
+        styles: dark ? DARK_STYLE : LIGHT_STYLE,
       })
 
       // Reveal the map only after tiles confirm successful auth and render
@@ -108,11 +124,11 @@ export function CorridorMap({
       new Marker({
         position: { lat: originLat, lng: originLng },
         map,
-        title: 'Origen',
+        title: t('origin'),
         icon: {
           path: SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: '#818cf8',
+          fillColor: ink,
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 2,
@@ -122,11 +138,11 @@ export function CorridorMap({
       new Marker({
         position: { lat: destLat, lng: destLng },
         map,
-        title: 'Destino',
+        title: t('destination'),
         icon: {
           path: SymbolPath.CIRCLE,
           scale: 7,
-          fillColor: '#f43f5e',
+          fillColor: sky,
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 2,
@@ -140,7 +156,7 @@ export function CorridorMap({
         new Polyline({
           path,
           map,
-          strokeColor: '#f5a623',
+          strokeColor: sky,
           strokeOpacity: 0.9,
           strokeWeight: 4,
         })
@@ -157,56 +173,41 @@ export function CorridorMap({
       clearTimeout(timer)
       window.gm_authFailure = prevAuthFailure
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originLat, originLng, destLat, destLng, pathPolyline])
 
   const mapsUrl = `https://www.google.com/maps/dir/${originLat},${originLng}/${destLat},${destLng}`
 
-  const header = (
-    <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-2">
-      <p className="text-[12px] text-insu-muted">
-        <span className="mr-1">📍</span>{corridorName} — tráfico en tiempo real
-      </p>
-      <a
-        href={mapsUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[11px] text-insu-accent hover:underline"
-      >
-        Abrir en Google Maps ↗
-      </a>
-    </div>
-  )
-
   return (
-    <div className="overflow-hidden rounded-lg border border-white/[0.07]">
-      {header}
-      <div className="relative h-48">
-        {/* Map div is always mounted so the SDK can render into it.
-            Kept invisible until tilesloaded confirms auth succeeded — this
-            prevents Google's error overlay from ever being visible. */}
+    <figure className="overflow-hidden rounded-card border border-border bg-surface">
+      <div className="relative h-52">
+        {/* Map div is always mounted so the SDK can render into it. Kept
+            invisible until tilesloaded confirms auth succeeded, so Google's
+            error overlay is never visible. */}
         <div
           ref={mapRef}
+          role="img"
+          aria-label={t('label', { route: routeName })}
           className="absolute inset-0"
           style={{ visibility: mapState === 'ready' ? 'visible' : 'hidden' }}
         />
         {mapState !== 'ready' && (
-          <div className="absolute inset-0 flex items-center justify-center gap-1.5 text-[13px] text-insu-muted">
-            {mapState === 'loading' ? 'Cargando mapa…' : (
-              <>
-                Mapa no disponible —
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-insu-accent hover:underline"
-                >
-                  ver ruta en Google Maps ↗
-                </a>
-              </>
-            )}
+          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-body-s text-ink-muted">
+            {mapState === 'loading' ? t('loading') : t('unavailable')}
           </div>
         )}
       </div>
-    </div>
+      <figcaption className="flex items-center justify-between gap-3 border-t border-border px-4">
+        <span className="py-3 text-caption text-ink-muted">{t('live')}</span>
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-h-touch items-center text-body-s font-bold text-sky hover:text-sky-deep"
+        >
+          {t('open')} ↗
+        </a>
+      </figcaption>
+    </figure>
   )
 }

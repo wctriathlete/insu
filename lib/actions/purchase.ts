@@ -8,6 +8,15 @@ import { dailyHazard, priceTenor, capacityFactor, tenorAvailable } from '@/lib/p
 import { createNotification } from '@/lib/notifications/create'
 import { marketDay, marketDayStartUtc } from '@/lib/utils/marketDay'
 
+/** Stable codes the UI translates (messages errors.*); `error` stays English for logs. */
+export type PurchaseErrorCode =
+  | 'signInToBuy' | 'signInToProvide' | 'verifyPending' | 'tooManyPending' | 'tierNotFound'
+  | 'contractNotFound' | 'noCapital' | 'capacityTooLow' | 'triggeredToday' | 'closed'
+  | 'choosePeriod' | 'triggerActive' | 'periodUnavailable' | 'payment' | 'position'
+  | 'minDeposit' | 'poolFull' | 'maxDeposit'
+
+export type PurchaseError = { error: string; code: PurchaseErrorCode }
+
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) throw new Error('STRIPE_SECRET_KEY is not configured')
@@ -17,11 +26,11 @@ function getStripe() {
 export async function createHedgerPaymentIntent(
   tierId: string,
   periodDays?: number,
-): Promise<{ clientSecret: string; expiresAt: string } | { error: string }> {
+): Promise<{ clientSecret: string; expiresAt: string } | PurchaseError> {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'You must be signed in to purchase protection' }
+  if (!user) return { error: 'You must be signed in to purchase protection', code: 'signInToBuy' }
 
   // Prevent flood: cap pending purchases at 5 per user
   const { count: pendingCount, error: countError } = await supabase
@@ -29,9 +38,9 @@ export async function createHedgerPaymentIntent(
     .select('id', { count: 'exact', head: true })
     .eq('user_id', user.id)
     .eq('status', 'pending_payment')
-  if (countError) return { error: 'Unable to verify pending purchases. Please try again.' }
+  if (countError) return { error: 'Unable to verify pending purchases. Please try again.', code: 'verifyPending' }
   if ((pendingCount ?? 0) >= 5) {
-    return { error: 'You have too many pending purchases. Complete or cancel them before buying again.' }
+    return { error: 'You have too many pending purchases. Complete or cancel them before buying again.', code: 'tooManyPending' }
   }
 
   const { data: tier, error: tierError } = await supabase
@@ -40,10 +49,10 @@ export async function createHedgerPaymentIntent(
     .eq('id', tierId)
     .single()
 
-  if (tierError || !tier) return { error: 'Protection tier not found' }
+  if (tierError || !tier) return { error: 'Protection tier not found', code: 'tierNotFound' }
 
   const capacityError = validateBuyerCapacity(tier.current_capacity_usd, tier.max_payouts * tier.payout_usd)
-  if (capacityError) return { error: capacityError }
+  if (capacityError) return { error: capacityError, code: tier.current_capacity_usd <= 0 ? 'noCapital' : 'capacityTooLow' }
 
   const { data: contract, error: contractError } = await supabase
     .from('contracts')
@@ -51,7 +60,7 @@ export async function createHedgerPaymentIntent(
     .eq('id', tier.contract_id)
     .single()
 
-  if (contractError || !contract) return { error: 'Contract not found' }
+  if (contractError || !contract) return { error: 'Contract not found', code: 'contractNotFound' }
 
   const isRecurring = contract.is_recurring
 
@@ -73,6 +82,7 @@ export async function createHedgerPaymentIntent(
       error: isRecurring
         ? 'This protection already triggered today — purchases reopen tomorrow.'
         : 'This contract has already triggered and is awaiting settlement.',
+      code: isRecurring ? 'triggeredToday' : 'closed',
     }
   }
 
@@ -82,7 +92,7 @@ export async function createHedgerPaymentIntent(
   let payoutsRemaining: number
 
   if (isRecurring) {
-    if (!periodDays) return { error: 'Choose a protection period' }
+    if (!periodDays) return { error: 'Choose a protection period', code: 'choosePeriod' }
     const { data: latest } = await supabase
       .from('oracle_readings')
       .select('value, trigger_met')
@@ -95,7 +105,7 @@ export async function createHedgerPaymentIntent(
     // an active window can straddle 00:00 UTC, so the latest reading may
     // still show a live trigger before any reading lands on the new UTC day
     if (reading?.trigger_met) {
-      return { error: 'The trigger is currently active — purchases reopen once conditions clear.' }
+      return { error: 'The trigger is currently active — purchases reopen once conditions clear.', code: 'triggerActive' }
     }
     const p = dailyHazard(
       Number(tier.base_probability),
@@ -104,7 +114,7 @@ export async function createHedgerPaymentIntent(
       contract.trigger_condition as any,
     )
     if (!tenorAvailable(periodDays, p)) {
-      return { error: 'That protection period is not available for this market. Choose a shorter window or use recurring coverage.' }
+      return { error: 'That protection period is not available for this market. Choose a shorter window or use recurring coverage.', code: 'periodUnavailable' }
     }
     const cap = capacityFactor(tier.current_capacity_usd, tier.max_capacity_usd)
     periodPremium = priceTenor(tier.payout_usd, periodDays, p, tier.max_payouts, { capacityFactor: cap }).premiumUsd
@@ -133,7 +143,7 @@ export async function createHedgerPaymentIntent(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('Stripe paymentIntents.create failed:', msg)
-    return { error: `Payment error: ${msg}` }
+    return { error: `Payment error: ${msg}`, code: 'payment' }
   }
 
   // coverage_period_days added in migration 20260523000001; cast until Supabase types are regenerated
@@ -162,7 +172,7 @@ export async function createHedgerPaymentIntent(
 
   if (positionError || !position) {
     console.error('hedger_positions insert failed:', positionError)
-    return { error: `Failed to create position: ${positionError?.message ?? 'unknown'}` }
+    return { error: `Failed to create position: ${positionError?.message ?? 'unknown'}`, code: 'position' }
   }
 
   await getStripe().paymentIntents.update(paymentIntent.id, {
@@ -175,13 +185,13 @@ export async function createHedgerPaymentIntent(
 export async function createProviderPaymentIntent(
   tierId: string,
   amountUsd: number,
-): Promise<{ clientSecret: string } | { error: string }> {
-  if (!amountUsd || amountUsd < 10) return { error: 'Minimum deposit is $10' }
+): Promise<{ clientSecret: string } | PurchaseError> {
+  if (!amountUsd || amountUsd < 10) return { error: 'Minimum deposit is $10', code: 'minDeposit' }
 
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'You must be signed in to provide capital' }
+  if (!user) return { error: 'You must be signed in to provide capital', code: 'signInToProvide' }
 
   const { data: tier, error: tierError } = await supabase
     .from('coverage_tiers')
@@ -189,10 +199,12 @@ export async function createProviderPaymentIntent(
     .eq('id', tierId)
     .single()
 
-  if (tierError || !tier) return { error: 'Protection tier not found' }
+  if (tierError || !tier) return { error: 'Protection tier not found', code: 'tierNotFound' }
 
   const capacityError = validateProviderCapacity(tier.max_capacity_usd, tier.current_capacity_usd, amountUsd)
-  if (capacityError) return { error: capacityError }
+  if (capacityError) {
+    return { error: capacityError, code: tier.max_capacity_usd - tier.current_capacity_usd <= 0 ? 'poolFull' : 'maxDeposit' }
+  }
 
   let paymentIntent: Stripe.PaymentIntent
   try {
@@ -205,7 +217,7 @@ export async function createProviderPaymentIntent(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('Stripe paymentIntents.create failed:', msg)
-    return { error: `Payment error: ${msg}` }
+    return { error: `Payment error: ${msg}`, code: 'payment' }
   }
 
   const { data: position, error: positionError } = await supabase
@@ -226,7 +238,7 @@ export async function createProviderPaymentIntent(
     .select('id')
     .single()
 
-  if (positionError || !position) return { error: 'Failed to create position' }
+  if (positionError || !position) return { error: 'Failed to create position', code: 'position' }
 
   await getStripe().paymentIntents.update(paymentIntent.id, {
     metadata: { position_type: 'provider', position_id: position.id, tier_id: tierId, user_id: user.id },
@@ -311,7 +323,7 @@ export async function activatePositionByPaymentIntent(
       .update({ status: 'active' })
       .eq('id', position_id)
       .eq('user_id', user.id)
-      .select('tier_id, capital_deposited_usd')
+      .select('tier_id, capital_deposited_usd, contract_id')
       .single()
 
     if (providerError || !providerPosition) {
@@ -324,8 +336,54 @@ export async function activatePositionByPaymentIntent(
       p_tier_id: providerPosition.tier_id,
       p_amount: providerPosition.capital_deposited_usd,
     })
+    await notifyCapacityWatchers(db, providerPosition.contract_id)
   }
 
   revalidatePath('/dashboard')
   return { ok: true, positionId: position_id }
+}
+
+/**
+ * "Avísame cuando haya cupo": after a deposit adds capital to a live contract,
+ * tell everyone who asked and clear their request. Reuses launch_interest (the
+ * notify-me table); best-effort, never fails the activation.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function notifyCapacityWatchers(db: any, contractId: string): Promise<void> {
+  try {
+    const { data: contract } = await db
+      .from('contracts')
+      .select('title, launch_stage')
+      .eq('id', contractId)
+      .single()
+    if (!contract || contract.launch_stage === 'coming_soon') return
+
+    // Only announce room once some tier can actually back a purchase again.
+    const { data: tiers } = await db
+      .from('coverage_tiers')
+      .select('current_capacity_usd, payout_usd, max_payouts')
+      .eq('contract_id', contractId)
+    const hasRoom = ((tiers ?? []) as { current_capacity_usd: number; payout_usd: number; max_payouts: number }[])
+      .some((t) => Number(t.current_capacity_usd) >= Number(t.payout_usd) * Number(t.max_payouts ?? 1))
+    if (!hasRoom) return
+
+    const { data: watchers } = await db
+      .from('launch_interest')
+      .select('user_id')
+      .eq('contract_id', contractId)
+    for (const w of (watchers ?? []) as { user_id: string }[]) {
+      await createNotification(db, {
+        userId: w.user_id,
+        type: 'product_launched',
+        title: `${contract.title} has room again`,
+        body: 'There is capacity to buy this protection again.',
+        contractId,
+      })
+    }
+    if ((watchers ?? []).length > 0) {
+      await db.from('launch_interest').delete().eq('contract_id', contractId)
+    }
+  } catch (err) {
+    console.error('notifyCapacityWatchers failed:', err)
+  }
 }

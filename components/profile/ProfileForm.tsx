@@ -1,133 +1,210 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
+import { ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateProfile } from '@/lib/actions/profile'
+import { setLocale, setTheme } from '@/lib/actions/preferences'
 import type { NotificationPrefs } from '@/lib/types'
+import type { Locale, Theme } from '@/i18n/config'
+import { SegmentedControl } from '@/components/sereno/SegmentedControl'
+import { Button } from '@/components/sereno/Button'
+import { Alert } from '@/components/sereno/Alert'
+import LogoutButton from '@/components/layout/LogoutButton'
+import { Field, inputCls } from '@/components/auth/fields'
 
 interface Props {
   email: string
-  role: string
-  createdAt: string
+  isAdmin: boolean
   fullName: string
   preferredCurrency: 'USD' | 'LOCAL'
+  theme: Theme
   notificationPrefs: NotificationPrefs
 }
 
-const PREF_LABELS: Record<keyof NotificationPrefs, string> = {
-  coverage_paid: 'Protection triggered / paid out',
-  coverage_expired: 'Protection expired (no payout)',
-  protection_purchased: 'Protection purchased',
-  provider_settled: 'Provider position settled',
-  product_launched: 'Launch of products I asked about',
-}
+const section = 'rounded-card border border-border bg-surface p-5'
 
-const fieldCls =
-  'w-full rounded-lg border border-white/[0.07] bg-bg-card px-4 py-2.5 text-[14px] text-insu-text outline-none transition-colors focus:border-insu-accent/40'
-const labelCls = 'mb-1.5 block text-[13px] font-semibold uppercase tracking-wider text-insu-muted'
-const cardCls = 'rounded-xl border border-white/[0.07] bg-bg-card/40 p-5'
-
+/**
+ * Perfil (handoff §6.11). Language, currency and appearance apply the moment
+ * they're chosen; name and notification preferences save together.
+ */
 export default function ProfileForm(props: Props) {
+  const t = useTranslations('profile')
+  const tc = useTranslations('common')
+  const locale = useLocale() as Locale
+  const router = useRouter()
+  const [, startTransition] = useTransition()
+
+  const [currency, setCurrency] = useState(props.preferredCurrency)
+  const [theme, setThemeState] = useState<Theme>(props.theme)
   const [fullName, setFullName] = useState(props.fullName)
-  const [currency, setCurrency] = useState<'USD' | 'LOCAL'>(props.preferredCurrency)
   const [prefs, setPrefs] = useState<NotificationPrefs>(props.notificationPrefs)
-  const [savingProfile, setSavingProfile] = useState(false)
-  const [profileMsg, setProfileMsg] = useState<string | null>(null)
-
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [password, setPassword] = useState('')
-  const [savingPw, setSavingPw] = useState(false)
-  const [pwMsg, setPwMsg] = useState<string | null>(null)
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  async function saveProfile(e: React.FormEvent) {
+  function chooseLocale(next: Locale) {
+    startTransition(async () => {
+      await setLocale(next)
+      router.refresh()
+    })
+  }
+
+  function chooseCurrency(next: 'USD' | 'LOCAL') {
+    setCurrency(next)
+    startTransition(async () => {
+      await updateProfile({ preferred_currency: next })
+      router.refresh()
+    })
+  }
+
+  function chooseTheme(next: Theme) {
+    setThemeState(next)
+    // Apply instantly; the cookie makes it stick on the next server render.
+    document.documentElement.dataset.theme = next
+    startTransition(async () => {
+      await setTheme(next)
+    })
+  }
+
+  async function save(e: React.FormEvent) {
     e.preventDefault()
-    setSavingProfile(true)
-    setProfileMsg(null)
-    const res = await updateProfile({ full_name: fullName, preferred_currency: currency, notification_prefs: prefs })
-    setProfileMsg('error' in res ? res.error : 'Saved.')
-    setSavingProfile(false)
+    setSaving(true)
+    setMsg(null)
+    const res = await updateProfile({ full_name: fullName, notification_prefs: prefs })
+    setMsg('error' in res ? { ok: false, text: tc('genericError') } : { ok: true, text: tc('saved') })
+    setSaving(false)
   }
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault()
-    setSavingPw(true)
     setPwMsg(null)
     const supabase = createClient()
-    if (!supabase) {
-      setPwMsg('Supabase is not configured.')
-      setSavingPw(false)
-      return
-    }
+    if (!supabase) return
     const { error } = await supabase.auth.updateUser({ password })
-    setPwMsg(error ? error.message : 'Password updated.')
+    setPwMsg(error ? { ok: false, text: error.message } : { ok: true, text: t('passwordUpdated') })
     if (!error) setPassword('')
-    setSavingPw(false)
   }
 
+  const initials = (props.fullName || props.email).trim().slice(0, 1).toUpperCase()
+
   return (
-    <div className="space-y-6">
-      {/* Account (read-only) */}
-      <section className={cardCls}>
-        <h2 className="mb-4 text-[15px] font-semibold text-insu-text">Account</h2>
-        <dl className="space-y-2 text-[13px]">
-          <div className="flex justify-between"><dt className="text-insu-muted">Email</dt><dd className="text-insu-text">{props.email}</dd></div>
-          <div className="flex justify-between"><dt className="text-insu-muted">Role</dt><dd className="text-insu-text capitalize">{props.role}</dd></div>
-          <div className="flex justify-between"><dt className="text-insu-muted">Member since</dt><dd className="text-insu-text">{new Date(props.createdAt).toLocaleDateString()}</dd></div>
-        </dl>
+    <div className="space-y-4">
+      <section className="flex items-center gap-4">
+        <span aria-hidden className="flex h-14 w-14 items-center justify-center rounded-full bg-mist font-display text-[28px] text-sky-deep">
+          {initials}
+        </span>
+        <div className="min-w-0">
+          <p className="text-title text-ink">{props.fullName || props.email}</p>
+          <p className="truncate text-body-s text-ink-secondary">{props.email}</p>
+        </div>
       </section>
 
-      {/* Editable settings */}
-      <form onSubmit={saveProfile} className={cardCls + ' space-y-5'}>
-        <h2 className="text-[15px] font-semibold text-insu-text">Settings</h2>
-
+      <section className={`${section} space-y-5`}>
         <div>
-          <label htmlFor="full-name" className={labelCls}>Display name</label>
-          <input id="full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className={fieldCls} />
+          <p id="lang-label" className="mb-2 text-label text-ink">{t('language')}</p>
+          <SegmentedControl
+            label={t('language')}
+            value={locale}
+            onChange={chooseLocale}
+            options={[
+              { value: 'es', label: tc('spanish') },
+              { value: 'en', label: tc('english') },
+            ]}
+          />
         </div>
-
         <div>
-          <label htmlFor="currency" className={labelCls}>Show prices in</label>
-          <select id="currency" value={currency} onChange={(e) => setCurrency(e.target.value as 'USD' | 'LOCAL')} className={fieldCls}>
-            <option value="USD">US Dollars (USD)</option>
-            <option value="LOCAL">Local currency</option>
-          </select>
+          <p className="mb-2 text-label text-ink">{t('currency')}</p>
+          <SegmentedControl
+            label={t('currency')}
+            value={currency}
+            onChange={chooseCurrency}
+            options={[
+              { value: 'USD', label: t('currencyUsd') },
+              { value: 'LOCAL', label: t('currencyLocal') },
+            ]}
+          />
+          <p className="mt-1.5 text-caption text-ink-muted">{tc('alwaysChargedInUsd')}</p>
         </div>
-
         <div>
-          <span className={labelCls}>Notifications</span>
-          <div className="space-y-2">
-            {(Object.keys(PREF_LABELS) as Array<keyof NotificationPrefs>).map((key) => (
-              <label key={key} className="flex cursor-pointer items-center gap-2.5 text-[13px] text-insu-dim">
+          <p className="mb-2 text-label text-ink">{t('appearance')}</p>
+          <SegmentedControl
+            label={t('appearance')}
+            value={theme}
+            onChange={chooseTheme}
+            options={[
+              { value: 'light', label: t('light') },
+              { value: 'dark', label: t('dark') },
+              { value: 'system', label: t('system') },
+            ]}
+          />
+        </div>
+      </section>
+
+      <section className={section}>
+        <h2 className="text-label text-ink">{t('card')}</h2>
+        <p className="mt-1 text-body-s text-ink-secondary">{t('cardBody')}</p>
+      </section>
+
+      <form onSubmit={save} className={`${section} space-y-4`}>
+        <Field id="full-name" label={t('name')}>
+          <input id="full-name" value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} />
+        </Field>
+        <fieldset>
+          <legend className="mb-2 text-label text-ink">{t('notifications')}</legend>
+          <div className="space-y-1">
+            {(Object.keys(prefs) as (keyof NotificationPrefs)[]).map((key) => (
+              <label key={key} className="flex min-h-touch cursor-pointer items-center gap-3 text-body-s text-ink-secondary">
                 <input
                   type="checkbox"
                   checked={prefs[key]}
-                  onChange={(e) => setPrefs((prev) => ({ ...prev, [key]: e.target.checked }))}
-                  className="h-4 w-4 accent-insu-accent"
+                  onChange={(e) => setPrefs((p) => ({ ...p, [key]: e.target.checked }))}
+                  className="h-5 w-5 shrink-0 accent-sky"
                 />
-                {PREF_LABELS[key]}
+                {t(`prefs.${key}`)}
               </label>
             ))}
           </div>
-        </div>
-
-        {profileMsg && <p role="status" className="text-[13px] text-insu-dim">{profileMsg}</p>}
-
-        <button type="submit" disabled={savingProfile} className="rounded-lg bg-insu-accent px-5 py-2.5 text-[14px] font-bold text-bg transition-all hover:bg-[#f7b84a] disabled:opacity-50">
-          {savingProfile ? 'Saving…' : 'Save changes'}
-        </button>
+        </fieldset>
+        {msg && <Alert tone={msg.ok ? 'success' : 'danger'}>{msg.text}</Alert>}
+        <Button type="submit" disabled={saving}>{saving ? tc('saving') : tc('save')}</Button>
       </form>
 
-      {/* Change password */}
-      <form onSubmit={savePassword} className={cardCls + ' space-y-4'}>
-        <h2 className="text-[15px] font-semibold text-insu-text">Change password</h2>
-        <div>
-          <label htmlFor="new-password" className={labelCls}>New password</label>
-          <input id="new-password" type="password" minLength={6} required value={password} onChange={(e) => setPassword(e.target.value)} className={fieldCls} />
-        </div>
-        {pwMsg && <p role="status" className="text-[13px] text-insu-dim">{pwMsg}</p>}
-        <button type="submit" disabled={savingPw} className="rounded-lg border border-white/[0.07] px-5 py-2.5 text-[14px] font-semibold text-insu-text transition-colors hover:border-white/15 disabled:opacity-50">
-          {savingPw ? 'Updating…' : 'Update password'}
-        </button>
+      <form onSubmit={savePassword} className={`${section} space-y-4`}>
+        <Field id="new-password" label={t('newPassword')}>
+          <input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            minLength={6}
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+        {pwMsg && <Alert tone={pwMsg.ok ? 'success' : 'danger'}>{pwMsg.text}</Alert>}
+        <Button type="submit" variant="secondary">{t('updatePassword')}</Button>
       </form>
+
+      <nav className={`${section} divide-y divide-border py-1`}>
+        {[
+          { href: '/submit', label: t('propose') },
+          { href: '/how-it-works', label: t('howAndTerms') },
+          ...(props.isAdmin ? [{ href: '/admin', label: 'Admin' }] : []),
+        ].map((l) => (
+          <Link key={l.href} href={l.href} className="flex min-h-[52px] items-center justify-between text-body font-bold text-ink hover:text-sky">
+            {l.label}
+            <ChevronRight size={18} aria-hidden className="text-ink-muted" />
+          </Link>
+        ))}
+      </nav>
+
+      <LogoutButton className="px-1" />
     </div>
   )
 }

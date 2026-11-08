@@ -57,6 +57,7 @@ export async function upsertContract(input: UpsertContractInput): Promise<string
     is_featured: input.is_featured,
     is_recurring: input.is_recurring,
     launch_stage: input.launch_stage,
+    ...(input.naming ?? {}),
   }
 
   if (input.id) {

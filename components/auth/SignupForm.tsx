@@ -2,131 +2,117 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { createClient } from '@/lib/supabase/client'
+import { Button } from '@/components/sereno/Button'
+import { Alert } from '@/components/sereno/Alert'
+import { DisplayTitle, emphasis } from '@/components/sereno/Typography'
+import { Field, inputCls } from './fields'
+import { authErrorMessage } from './LoginForm'
 
-export default function SignupForm() {
+/**
+ * Sign-up. Email confirmation is on in Supabase, so there's no session until
+ * the link is opened: the link goes through /auth/callback?next=… and lands
+ * the person back on the contract with their selection, ready to pay.
+ */
+export default function SignupForm({ next, continuing }: { next: string | null; continuing: boolean }) {
+  const t = useTranslations('auth')
+  const tc = useTranslations('common')
+  const router = useRouter()
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (!accepted) return
     setLoading(true)
     setError(null)
-
     const supabase = createClient()
     if (!supabase) {
-      setError('Supabase is not configured.')
+      setError(tc('genericError'))
       setLoading(false)
       return
     }
-    const { error } = await supabase.auth.signUp({
+    const callback = new URL('/auth/callback', window.location.origin)
+    if (next) callback.searchParams.set('next', next)
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { data: { full_name: fullName }, emailRedirectTo: callback.toString() },
     })
-
     if (error) {
-      setError(error.message)
+      setError(authErrorMessage(error.message, t))
       setLoading(false)
       return
     }
-
-    setSuccess(true)
+    if (data.session) {
+      // Auto-confirm environments: go straight on.
+      router.push(next ?? '/')
+      router.refresh()
+      return
+    }
+    setSent(true)
     setLoading(false)
   }
 
-  if (success) {
+  if (sent) {
     return (
-      <div className="mx-auto w-full max-w-sm text-center">
-        <div className="mb-4 text-4xl" aria-hidden="true">✉️</div>
-        <h2 className="mb-2 font-display text-[28px] tracking-[2px] text-insu-text">
-          Check your email
-        </h2>
-        <p className="text-[13px] text-insu-muted">
-          We sent a confirmation link to{' '}
-          <span className="text-insu-text">{email}</span>
-        </p>
+      <div role="status" className="rounded-card bg-mist p-5">
+        <DisplayTitle as="h2" size="s">{t.rich('checkEmailTitle', emphasis)}</DisplayTitle>
+        <p className="mt-2 text-body text-sky-deep">{t('checkEmailBody', { email })}</p>
       </div>
     )
   }
 
   return (
-    <div className="mx-auto w-full max-w-sm">
-      <h1 className="mb-1 font-display text-[36px] tracking-[3px] text-insu-text">
-        Get protected
-      </h1>
-      <p className="mb-8 text-[13px] text-insu-muted">
-        Already have an account?{' '}
-        <Link href="/auth/login" className="text-insu-accent hover:underline">
-          Log in
-        </Link>
-      </p>
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label htmlFor="signup-name" className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wider text-insu-muted">
-            Full Name
-          </label>
-          <input
-            id="signup-name"
-            type="text"
-            required
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            className="w-full rounded-lg border border-white/[0.07] bg-bg-card px-4 py-2.5 text-[14px] text-insu-text outline-none transition-colors focus:border-insu-accent/40 focus:bg-insu-accent/[0.02]"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="signup-email" className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wider text-insu-muted">
-            Email
-          </label>
-          <input
-            id="signup-email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-white/[0.07] bg-bg-card px-4 py-2.5 text-[14px] text-insu-text outline-none transition-colors focus:border-insu-accent/40 focus:bg-insu-accent/[0.02]"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="signup-password" className="mb-1.5 block text-[13px] font-semibold uppercase tracking-wider text-insu-muted">
-            Password
-          </label>
-          <input
-            id="signup-password"
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-white/[0.07] bg-bg-card px-4 py-2.5 text-[14px] text-insu-text outline-none transition-colors focus:border-insu-accent/40 focus:bg-insu-accent/[0.02]"
-          />
-        </div>
-
-        {error && (
-          <p role="alert" className="rounded-lg bg-red-500/10 px-4 py-2.5 text-[13px] text-red-400">
-            {error}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-insu-accent py-2.5 text-[14px] font-bold text-bg transition-all hover:bg-[#f7b84a] disabled:opacity-50"
-        >
-          {loading ? 'Creating account…' : 'Sign Up'}
-        </button>
-      </form>
-    </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <Field id="signup-name" label={t('name')}>
+        <input id="signup-name" type="text" autoComplete="name" required value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputCls} />
+      </Field>
+      <Field id="signup-email" label={t('email')}>
+        <input id="signup-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className={inputCls} />
+      </Field>
+      <Field id="signup-password" label={t('password')} hint={t('passwordHint')}>
+        <input
+          id="signup-password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={6}
+          aria-describedby="signup-password-hint"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className={inputCls}
+        />
+      </Field>
+      <label className="flex min-h-touch cursor-pointer items-start gap-3 text-body-s text-ink-secondary">
+        <input
+          type="checkbox"
+          required
+          checked={accepted}
+          onChange={(e) => setAccepted(e.target.checked)}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-sky"
+        />
+        <span>
+          {t.rich('terms', {
+            link: (chunks) => (
+              <Link href="/terms" target="_blank" className="font-bold text-sky underline underline-offset-2">
+                {chunks}
+              </Link>
+            ),
+          })}
+        </span>
+      </label>
+      {error && <Alert tone="danger">{error}</Alert>}
+      <Button type="submit" size="main" block disabled={loading || !accepted}>
+        {loading ? t('creating') : continuing ? t('createAndContinue') : t('createCta')}
+      </Button>
+    </form>
   )
 }

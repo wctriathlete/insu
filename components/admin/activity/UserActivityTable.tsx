@@ -20,10 +20,10 @@ function fmtDate(iso: string | null): string {
 function TimelineRow({ item }: { item: TimelineItem }) {
   return (
     <div className="flex items-baseline gap-3 py-1 text-[13px]">
-      <span className="w-28 flex-shrink-0 text-insu-dim">{fmtDate(item.at)}</span>
-      <span className="text-insu-text">{item.primary}</span>
-      {item.amountUsd != null && <span className="font-mono text-insu-green">{formatCurrency(item.amountUsd, 'USD')}</span>}
-      {item.meta && <span className="text-insu-muted">{item.meta}</span>}
+      <span className="w-28 flex-shrink-0 text-ink-secondary">{fmtDate(item.at)}</span>
+      <span className="text-ink">{item.primary}</span>
+      {item.amountUsd != null && <span className="tabular-nums text-pay">{formatCurrency(item.amountUsd, 'USD')}</span>}
+      {item.meta && <span className="text-ink-muted">{item.meta}</span>}
     </div>
   )
 }
@@ -32,13 +32,13 @@ export function UserActivityTable({ users }: { users: UserActivity[] }) {
   const [openId, setOpenId] = useState<string | null>(null)
 
   if (users.length === 0) {
-    return <p className="text-[13px] text-insu-muted">No users yet.</p>
+    return <p className="text-[13px] text-ink-muted">No users yet.</p>
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-white/[0.07]">
+    <div className="overflow-hidden rounded-lg border border-border">
       <table className="w-full text-left text-[13px]">
-        <thead className="bg-white/[0.03] text-[11px] uppercase tracking-wider text-insu-muted">
+        <thead className="bg-surface-raised text-[11px] uppercase tracking-wider text-ink-muted">
           <tr>
             <th className="px-3 py-2">Tester</th>
             <th className="px-3 py-2">Active days</th>
@@ -55,22 +55,22 @@ export function UserActivityTable({ users }: { users: UserActivity[] }) {
             <Fragment key={u.userId}>
               <tr
                 onClick={() => setOpenId((prev) => (prev === u.userId ? null : u.userId))}
-                className="cursor-pointer border-t border-white/[0.05] hover:bg-white/[0.03]"
+                className="cursor-pointer border-t border-border hover:bg-surface-raised"
               >
                 <td className="px-3 py-2">
-                  <div className="font-medium text-insu-text">{u.name || '(no name)'}</div>
-                  <div className="text-[11px] text-insu-dim">{u.email ?? '—'}</div>
+                  <div className="font-medium text-ink">{u.name || '(no name)'}</div>
+                  <div className="text-[11px] text-ink-secondary">{u.email ?? '—'}</div>
                 </td>
-                <td className="px-3 py-2 font-mono">{u.activeDays}</td>
-                <td className="px-3 py-2 text-insu-muted">{fmtDate(u.lastSeenAt)}</td>
-                <td className="px-3 py-2 font-mono">{u.buys.length}</td>
-                <td className="px-3 py-2 font-mono">{u.deposits.length}</td>
-                <td className="px-3 py-2 font-mono">{formatCurrency(u.totalPremiumUsd, 'USD')}</td>
-                <td className="px-3 py-2 font-mono text-insu-green">{formatCurrency(u.totalPayoutUsd, 'USD')}</td>
+                <td className="px-3 py-2 tabular-nums">{u.activeDays}</td>
+                <td className="px-3 py-2 text-ink-muted">{fmtDate(u.lastSeenAt)}</td>
+                <td className="px-3 py-2 tabular-nums">{u.buys.length}</td>
+                <td className="px-3 py-2 tabular-nums">{u.deposits.length}</td>
+                <td className="px-3 py-2 tabular-nums">{formatCurrency(u.totalPremiumUsd, 'USD')}</td>
+                <td className="px-3 py-2 tabular-nums text-pay">{formatCurrency(u.totalPayoutUsd, 'USD')}</td>
                 <td className="px-3 py-2 whitespace-nowrap">{STATUS_LABEL[u.status]}</td>
               </tr>
               {openId === u.userId && (
-                <tr className="border-t border-white/[0.05] bg-white/[0.02]">
+                <tr className="border-t border-border bg-surface-raised">
                   <td colSpan={8} className="px-4 py-3">
                     {u.timeline.map((item, i) => (
                       <TimelineRow key={i} item={item} />
