@@ -26,7 +26,7 @@ describe('SearchInput', () => {
 
   it('updates the input value as the user types', () => {
     renderInput()
-    const input = screen.getByPlaceholderText(/search/i) as HTMLInputElement
+    const input = screen.getByRole('searchbox', { name: /buscar/i }) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'rain' } })
     expect(input.value).toBe('rain')
   })
@@ -34,14 +34,14 @@ describe('SearchInput', () => {
   it('does not navigate while searching from the home page', () => {
     mocks.pathname = '/'
     renderInput()
-    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'rain' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: /buscar/i }), { target: { value: 'rain' } })
     expect(mocks.push).not.toHaveBeenCalled()
   })
 
   it('navigates to the home browse page when searching from another page', () => {
     mocks.pathname = '/dashboard'
     renderInput()
-    fireEvent.change(screen.getByPlaceholderText(/search/i), { target: { value: 'rain' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: /buscar/i }), { target: { value: 'rain' } })
     expect(mocks.push).toHaveBeenCalledWith('/')
   })
 })

@@ -23,25 +23,20 @@ describe('StripePaymentForm', () => {
     stripeMocks.elements = null
   })
 
-  it('renders the pay button with formatted amount', () => {
-    render(
-      <StripePaymentForm clientSecret="pi_secret" amountUsd={38} onSuccess={vi.fn()} onError={vi.fn()} />
-    )
-    expect(screen.getByRole('button', { name: /pay \$38/i })).toBeInTheDocument()
+  it('renders the pay button with the formatted amount', () => {
+    render(<StripePaymentForm clientSecret="pi_secret" amountLabel="$38" onSuccess={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Pagar $38' })).toBeInTheDocument()
   })
 
-  it('disables pay button when stripe is not loaded', () => {
-    render(
-      <StripePaymentForm clientSecret="pi_secret" amountUsd={38} onSuccess={vi.fn()} onError={vi.fn()} />
-    )
-    expect(screen.getByRole('button', { name: /pay/i })).toBeDisabled()
+  it('disables the pay button when Stripe is not loaded', () => {
+    render(<StripePaymentForm clientSecret="pi_secret" amountLabel="$38" onSuccess={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /pagar/i })).toBeDisabled()
   })
 
-  it('renders the card element', () => {
-    render(
-      <StripePaymentForm clientSecret="pi_secret" amountUsd={38} onSuccess={vi.fn()} onError={vi.fn()} />
-    )
+  it('labels the card field', () => {
+    render(<StripePaymentForm clientSecret="pi_secret" amountLabel="$38" onSuccess={vi.fn()} />)
     expect(screen.getByTestId('card-element')).toBeInTheDocument()
+    expect(screen.getByText('Tarjeta')).toBeInTheDocument()
   })
 
   it('keeps the button in processing state until onSuccess resolves', async () => {
@@ -50,32 +45,34 @@ describe('StripePaymentForm', () => {
     stripeMocks.stripe = { confirmCardPayment: vi.fn().mockResolvedValue({}) }
     stripeMocks.elements = { getElement: () => ({}) }
 
-    render(
-      <StripePaymentForm clientSecret="pi_secret" amountUsd={38} onSuccess={onSuccess} onError={vi.fn()} />
-    )
-    await userEvent.click(screen.getByRole('button', { name: /pay/i }))
+    render(<StripePaymentForm clientSecret="pi_secret" amountLabel="$38" onSuccess={onSuccess} />)
+    await userEvent.click(screen.getByRole('button', { name: /pagar/i }))
 
     // Card confirmed, activation still in flight: the form must not re-enable.
     await waitFor(() => expect(onSuccess).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: /processing/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /procesando/i })).toBeDisabled()
 
     resolveActivation()
-    await waitFor(() => expect(screen.getByRole('button', { name: /pay/i })).not.toBeDisabled())
+    await waitFor(() => expect(screen.getByRole('button', { name: /pagar/i })).not.toBeDisabled())
   })
 
-  it('re-enables the button when the card is declined', async () => {
-    stripeMocks.stripe = {
-      confirmCardPayment: vi.fn().mockResolvedValue({ error: { message: 'Card declined' } }),
-    }
+  it('shows the declined alert, keeps the same intent and lets the person retry', async () => {
+    const confirmCardPayment = vi.fn().mockResolvedValue({ error: { message: 'Your card was declined.' } })
+    stripeMocks.stripe = { confirmCardPayment }
     stripeMocks.elements = { getElement: () => ({}) }
-    const onError = vi.fn()
+    const onSuccess = vi.fn()
 
-    render(
-      <StripePaymentForm clientSecret="pi_secret" amountUsd={38} onSuccess={vi.fn()} onError={onError} />
-    )
-    await userEvent.click(screen.getByRole('button', { name: /pay/i }))
+    render(<StripePaymentForm clientSecret="pi_secret" amountLabel="$38" onSuccess={onSuccess} />)
+    await userEvent.click(screen.getByRole('button', { name: /pagar/i }))
 
-    await waitFor(() => expect(onError).toHaveBeenCalledWith('Card declined'))
-    expect(screen.getByRole('button', { name: /pay/i })).not.toBeDisabled()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Tu tarjeta no pasó. No te cobramos nada.')
+    expect(onSuccess).not.toHaveBeenCalled()
+
+    const retry = screen.getByRole('button', { name: 'Intentar de nuevo · $38' })
+    expect(retry).not.toBeDisabled()
+    await userEvent.click(retry)
+    expect(confirmCardPayment).toHaveBeenCalledTimes(2)
+    expect(confirmCardPayment).toHaveBeenLastCalledWith('pi_secret', expect.anything())
   })
 })
