@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import { LOCALE_COOKIE, THEME_COOKIE, isLocale, isTheme, type Locale, type Theme } from '@/i18n/config'
+import { LOCALE_COOKIE, isLocale, type Locale } from '@/i18n/config'
 
 const ONE_YEAR = 60 * 60 * 24 * 365
 
@@ -26,13 +26,5 @@ export async function setLocale(locale: Locale): Promise<{ ok: true } | { error:
   } catch {
     // Cookie is the source of truth for rendering; the profile copy is best-effort.
   }
-  return { ok: true }
-}
-
-/** Persist the appearance setting (Claro · Oscuro · Automático) in a cookie. */
-export async function setTheme(theme: Theme): Promise<{ ok: true } | { error: string }> {
-  if (!isTheme(theme)) return { error: 'Invalid theme' }
-  const store = await cookies()
-  store.set(THEME_COOKIE, theme, { path: '/', maxAge: ONE_YEAR, sameSite: 'lax' })
   return { ok: true }
 }

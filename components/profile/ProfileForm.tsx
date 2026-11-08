@@ -7,9 +7,9 @@ import { useLocale, useTranslations } from 'next-intl'
 import { ChevronRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { updateProfile } from '@/lib/actions/profile'
-import { setLocale, setTheme } from '@/lib/actions/preferences'
+import { setLocale } from '@/lib/actions/preferences'
 import type { NotificationPrefs } from '@/lib/types'
-import type { Locale, Theme } from '@/i18n/config'
+import { THEME_COOKIE, type Locale, type Theme } from '@/i18n/config'
 import { SegmentedControl } from '@/components/sereno/SegmentedControl'
 import { Button } from '@/components/sereno/Button'
 import { Alert } from '@/components/sereno/Alert'
@@ -65,10 +65,9 @@ export default function ProfileForm(props: Props) {
   function chooseTheme(next: Theme) {
     setThemeState(next)
     // Apply instantly; the cookie makes it stick on the next server render.
+    // Appearance is a per-browser preference, so no server round-trip.
     document.documentElement.dataset.theme = next
-    startTransition(async () => {
-      await setTheme(next)
-    })
+    document.cookie = `${THEME_COOKIE}=${next}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`
   }
 
   async function save(e: React.FormEvent) {
