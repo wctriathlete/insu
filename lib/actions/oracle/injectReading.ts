@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { checkAdmin } from '@/lib/auth/admin'
 import { evaluateTrigger, type TriggerCondition } from '@/lib/oracle/trigger'
 import type { Json } from '@/lib/supabase/database.types'
 
@@ -27,25 +28,12 @@ export async function injectReading(
     return { ok: false, error: 'Invalid JSON — check your reading value' }
   }
 
-  const userClient = await createClient()
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) return { ok: false, error: 'Unauthorized' }
-
-  // Require AAL2 (TOTP MFA), matching assertAdmin: a manual reading can fire
+  // Signed in + AAL2 (TOTP MFA) + admin role: a manual reading can fire
   // payouts, so an admin password alone must not be enough.
-  const { data: aalData } = await userClient.auth.mfa.getAuthenticatorAssuranceLevel()
-  if (aalData?.currentLevel !== 'aal2') return { ok: false, error: 'MFA_REQUIRED' }
+  const admin = await checkAdmin()
+  if (!admin.ok) return { ok: false, error: admin.reason }
 
   const supabase = createServiceClient()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if ((profile as { role: string } | null)?.role !== 'admin') {
-    return { ok: false, error: 'Forbidden' }
-  }
-
   const { data: contract, error: contractError } = await supabase
     .from('contracts')
     .select('id, slug, status, settled_outcome, trigger_condition')

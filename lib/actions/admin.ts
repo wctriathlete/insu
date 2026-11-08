@@ -1,7 +1,8 @@
 'use server'
 
 import Stripe from 'stripe'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
+import { checkAdmin } from '@/lib/auth/admin'
 import { fetchCorridorPolyline } from '@/lib/oracle/fetcher'
 import { createNotification } from '@/lib/notifications/create'
 import type { UpsertContractInput } from '@/lib/types'
@@ -13,22 +14,10 @@ function getStripe() {
 }
 
 async function assertAdmin() {
-  const userClient = await createClient()
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-
-  // Require AAL2 (TOTP MFA) for all admin operations (PCI Req 8)
-  const { data: aalData } = await userClient.auth.mfa.getAuthenticatorAssuranceLevel()
-  if (aalData?.currentLevel !== 'aal2') throw new Error('MFA_REQUIRED')
-
-  const supabase = createServiceClient()
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if ((profile as { role: string } | null)?.role !== 'admin') throw new Error('Forbidden')
-  return { supabase, userId: user.id }
+  // Signed in + AAL2 (TOTP MFA, PCI Req 8) + admin role — see lib/auth/admin.
+  const admin = await checkAdmin()
+  if (!admin.ok) throw new Error(admin.reason)
+  return { supabase: createServiceClient(), userId: admin.userId }
 }
 
 export async function upsertContract(input: UpsertContractInput): Promise<string> {

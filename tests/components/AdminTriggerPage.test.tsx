@@ -39,6 +39,12 @@ const createClient = vi.fn(async () => ({
   from: userFrom,
 }))
 
+// Auth is checkAdmin's job (tests/lib/auth/admin.test.ts); here the caller is
+// a verified admin and only the data path is under test.
+vi.mock('@/lib/auth/admin', () => ({
+  checkAdmin: vi.fn().mockResolvedValue({ ok: true, userId: 'admin-1' }),
+}))
+
 vi.mock('@/lib/supabase/server', () => ({
   createServiceClient: () => createServiceClient(),
   createClient: () => createClient(),

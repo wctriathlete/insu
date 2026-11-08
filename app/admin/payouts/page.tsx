@@ -1,21 +1,11 @@
-import { redirect } from 'next/navigation'
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/server'
 import { PayoutQueue } from '@/components/admin/payouts/PayoutQueue'
+import { checkAdmin } from '@/lib/auth/admin'
 
 export default async function AdminPayoutsPage() {
-  // The admin layout already enforces admin + AAL2 MFA, but this page reads with
-  // the service-role client (which bypasses RLS), so re-verify the caller is an
-  // admin here too — defense in depth against the page rendering outside its
-  // layout.
-  const userClient = await createClient()
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) redirect('/auth/login')
-  const { data: profile } = await userClient
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-  if ((profile as { role: string } | null)?.role !== 'admin') redirect('/')
+  // Admin + MFA checked here, not just in the layout: Next renders this page
+  // and ships its data even when the layout swaps in the MFA gate.
+  if (!(await checkAdmin()).ok) return null
 
   // The "Own payouts" RLS policy only exposes a buyer's own payouts, so a
   // user-scoped read returns nothing for an admin viewing the queue. The joins

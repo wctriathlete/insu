@@ -489,6 +489,22 @@ describe('activatePositionByPaymentIntent', () => {
     expect(mockServiceHedgerUpdate).not.toHaveBeenCalled()
   })
 
+  it('reports a still-processing payment as pending without activating anything', async () => {
+    // 'processing' (e.g. bank debits) can still fail — the webhook activates on
+    // payment_intent.succeeded instead.
+    mockPaymentIntentsRetrieve.mockResolvedValue({
+      status: 'processing',
+      metadata: { position_type: 'hedger', position_id: 'pos-1' },
+    })
+
+    const { activatePositionByPaymentIntent } = await import('@/lib/actions/purchase')
+    const result = await activatePositionByPaymentIntent('pi_test_secret_abc')
+
+    expect(result).toEqual({ pending: true })
+    expect(mockServiceHedgerUpdate).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
   describe('provider deposits', () => {
     const activatedDeposit = { tier_id: 'tier-basic', capital_deposited_usd: 10, contract_id: 'c1' }
 

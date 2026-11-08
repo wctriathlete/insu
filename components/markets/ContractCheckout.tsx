@@ -170,6 +170,7 @@ export default function ContractCheckout({
   const [expiresAt, setExpiresAt] = useState<string | null>(null)
   const [confirmation, setConfirmation] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
   const [loading, setLoading] = useState(false)
   const [watching, setWatching] = useState(watchingCapacity)
   const autoStarted = useRef(false)
@@ -214,6 +215,11 @@ export default function ContractCheckout({
     if (!clientSecret) return
     try {
       const result = await activatePositionByPaymentIntent(clientSecret)
+      if ('pending' in result) {
+        // Paid but not yet settled — the webhook activates it once it clears.
+        setPending(true)
+        return
+      }
       if ('error' in result) {
         console.error('Activation failed:', result.error)
         setError(t('payment.activationError'))
@@ -377,7 +383,9 @@ export default function ContractCheckout({
               {error && <Alert tone="danger">{error}</Alert>}
               {triggerActive && <Alert tone="caution">{t('detail.triggerActive')}</Alert>}
 
-              {step === 'pay' && clientSecret ? (
+              {pending ? (
+                <Alert tone="info">{t('payment.confirming')}</Alert>
+              ) : step === 'pay' && clientSecret ? (
                 <>
                   <StripePaymentForm clientSecret={clientSecret} amountLabel={priceLabel} onSuccess={onPaid} />
                   <Button variant="link" onClick={resetChoice}>

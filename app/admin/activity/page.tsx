@@ -1,16 +1,11 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { getUserActivity } from '@/lib/actions/adminActivity'
 import { UserActivityTable } from '@/components/admin/activity/UserActivityTable'
+import { checkAdmin } from '@/lib/auth/admin'
 
 export default async function AdminActivityPage() {
-  // The admin layout enforces admin + AAL2 MFA, but getUserActivity reads via the
-  // service client (bypasses RLS), so re-verify admin here (defense in depth).
-  const userClient = await createClient()
-  const { data: { user } } = await userClient.auth.getUser()
-  if (!user) redirect('/auth/login')
-  const { data: profile } = await userClient.from('profiles').select('role').eq('id', user.id).single()
-  if ((profile as { role: string } | null)?.role !== 'admin') redirect('/')
+  // Admin + MFA checked here, not just in the layout: Next renders this page
+  // and ships its data even when the layout swaps in the MFA gate.
+  if (!(await checkAdmin()).ok) return null
 
   const users = await getUserActivity()
 
