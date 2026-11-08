@@ -111,18 +111,18 @@ export function AdminMfaGate({ onVerified }: { onVerified: () => void }) {
         </h1>
 
         {mode === 'loading' && (
-          <p className="text-sm text-gray-500">Checking your security settings…</p>
+          <p className="text-sm text-ink-muted">Checking your security settings…</p>
         )}
 
         {mode === 'error' && (
-          <p className="text-red-600 text-sm">{error ?? 'Something went wrong.'}</p>
+          <p className="text-danger text-sm">{error ?? 'Something went wrong.'}</p>
         )}
 
         {(mode === 'enroll' || mode === 'verify') && (
           <>
             {mode === 'enroll' ? (
               <div className="mb-6">
-                <p className="text-sm text-gray-500 mb-4">
+                <p className="text-sm text-ink-muted mb-4">
                   Scan this QR code with your authenticator app (Google Authenticator, 1Password,
                   Authy…), then enter the 6-digit code to activate.
                 </p>
@@ -131,14 +131,14 @@ export function AdminMfaGate({ onVerified }: { onVerified: () => void }) {
                   <img src={qrCode} alt="Scan this QR code with your authenticator app" className="mx-auto mb-3 h-44 w-44" />
                 )}
                 {secret && (
-                  <p className="text-xs text-gray-400 text-center break-all">
+                  <p className="text-xs text-ink-muted text-center break-all">
                     Can&apos;t scan? Enter this key manually:<br />
-                    <span className="font-mono text-gray-600">{secret}</span>
+                    <span className="tabular-nums text-ink-muted">{secret}</span>
                   </p>
                 )}
               </div>
             ) : (
-              <p className="text-sm text-gray-500 mb-6">
+              <p className="text-sm text-ink-muted mb-6">
                 Enter your authenticator app code to access the admin panel.
               </p>
             )}
@@ -154,7 +154,7 @@ export function AdminMfaGate({ onVerified }: { onVerified: () => void }) {
                 className="w-full border rounded px-3 py-2 text-center text-lg tracking-widest"
                 required
               />
-              {error && <p className="text-red-600 text-sm">{error}</p>}
+              {error && <p className="text-danger text-sm">{error}</p>}
               <button
                 type="submit"
                 disabled={loading || code.length !== 6}

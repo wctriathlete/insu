@@ -1,109 +1,132 @@
+'use client'
+
 import { useMemo } from 'react'
 import Link from 'next/link'
-import { cn, formatCurrency } from '@/lib/utils'
-import CoverageDates from '@/components/markets/CoverageDates'
+import { useLocale, useTranslations } from 'next-intl'
+import { coveredWindowDays } from '@/lib/utils/coverageWindow'
+import { formatShortDay, marketDayOf, money } from '@/lib/format'
+import { commuteWindowOf, contractEyebrow, contractName, windowLabel, productKind } from '@/lib/contracts/display'
+import { resolveDisplayCurrency } from '@/lib/currency/resolve'
+import type { DisplayMode } from '@/lib/currency/config'
 import type { HedgerPositionWithContract } from '@/lib/types'
+import type { Locale } from '@/i18n/config'
+import { StatusBadge } from '@/components/sereno/StatusBadge'
+import { DayStrip } from '@/components/sereno/DayStrip'
+import LiveCondition from '@/components/sereno/LiveCondition'
 
-export function ProtectionCard({ position }: { position: HedgerPositionWithContract }) {
-  const {
-    contract, tier, status,
-    premium_paid_usd, payout_amount_usd,
-    purchased_at, expires_at,
-  } = position
+const DAY_MS = 86_400_000
+
+/**
+ * Owned protection (handoff §5 ProtectionCard, owned): title + window · tier,
+ * status word, the live reading, Pagaste · Recibes si pasa · Termina, and a
+ * day strip. Never shows raw trigger_type.
+ */
+export function ProtectionCard({
+  position,
+  displayMode,
+}: {
+  position: HedgerPositionWithContract
+  displayMode: DisplayMode
+}) {
+  const t = useTranslations()
+  const locale = useLocale() as Locale
+  const { contract, tier, status, premium_paid_usd, payout_amount_usd, purchased_at, expires_at } = position
+  const currency = resolveDisplayCurrency(displayMode, contract.location?.country)
+  const corridor = contract.corridor ?? null
+  const kind = productKind(contract)
 
   // eslint-disable-next-line react-hooks/purity
   const now = useMemo(() => Date.now(), [])
-  const expiresMs = new Date(expires_at).getTime()
   const purchasedMs = new Date(purchased_at).getTime()
-  const totalDays = Math.max(1, Math.round((expiresMs - purchasedMs) / 86_400_000))
-  const daysLeft = Math.max(0, Math.round((expiresMs - now) / 86_400_000))
-  // Fill represents elapsed coverage (conventional progress direction): empty at
-  // purchase, full at expiry. The label below states the time remaining.
-  const elapsedPct = Math.min(100, Math.max(0, ((now - purchasedMs) / (expiresMs - purchasedMs)) * 100))
+  const expiresMs = new Date(expires_at).getTime()
+  const totalDays = position.coverage_period_days ?? Math.max(1, Math.round((expiresMs - purchasedMs) / DAY_MS))
 
-  const isPaidOut = status === 'paid_out'
-  const isExpired = status === 'expired'
+  const maxPayouts = tier.max_payouts ?? 1
+  const payoutsMade = position.payouts_made ?? 0
+  const isActive = status === 'active'
+  const badge =
+    status === 'paid_out'
+      ? { tone: 'success' as const, label: t('status.paid') }
+      : status === 'expired'
+        ? { tone: 'neutral' as const, label: t('status.ended') }
+        : payoutsMade > 0
+          ? { tone: 'success' as const, label: t('status.payments', { count: payoutsMade }) }
+          : { tone: 'info' as const, label: t('status.active') }
 
-  const badge = isPaidOut
-    ? { label: 'PAID OUT ✓', bg: 'bg-[#14532d]', text: 'text-insu-green', ring: 'ring-insu-green' }
-    : isExpired
-    ? { label: 'EXPIRED', bg: 'bg-[#1c2333]', text: 'text-insu-muted', ring: 'ring-white/10' }
-    : { label: 'ACTIVE', bg: 'bg-[#14532d]', text: 'text-insu-green', ring: 'ring-insu-green/20' }
+  // Day strip: corridor protections count covered windows; others count days.
+  let current = Math.min(totalDays, Math.max(1, Math.floor((now - purchasedMs) / DAY_MS) + 1))
+  let total = totalDays
+  if (corridor) {
+    const days = coveredWindowDays(purchased_at, totalDays, corridor.window_start, corridor.window_end)
+    if (days.length > 0) {
+      total = days.length
+      const today = marketDayOf(new Date(now))
+      const idx = days.findIndex((d) => d.day >= today)
+      current = idx === -1 ? total : idx + 1
+    }
+  }
+  const remaining = Math.max(0, total - current)
+  const progress = corridor
+    ? t('dashboard.dayProgress', {
+        window: t(`windows.${commuteWindowOf(corridor)}Short`),
+        current,
+        total,
+        remaining,
+      })
+    : t('dashboard.dayProgressPlain', { current, total, remaining })
 
-  const dateStr = new Date(expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const receiveLeft = isActive ? payout_amount_usd * (position.payouts_remaining ?? maxPayouts) : payout_amount_usd * payoutsMade
+  const tierLabel = maxPayouts > 1 ? t('tiers.pro', { count: maxPayouts }) : t('tiers.basic')
 
   return (
-    <Link href={`/markets/${contract.slug}`} className="block">
-      <div className={cn(
-        'rounded-card border bg-bg-card p-4 transition-colors hover:bg-bg-card-hover',
-        isPaidOut ? 'border-insu-green/20' : 'border-white/[0.07]',
-        isExpired && 'opacity-50',
-      )}>
-        {/* header */}
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-body text-sm font-bold text-insu-text">{contract.title}</p>
-            <p className="mt-0.5 font-body text-[12px] capitalize text-insu-muted">
-              {tier.name} tier · {contract.trigger_type}
-            </p>
-          </div>
-          <span className={cn(
-            'shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px] ring-1',
-            badge.bg, badge.text, badge.ring,
-          )}>
-            {badge.label}
-          </span>
+    <Link
+      href={`/markets/${contract.slug}`}
+      className="block rounded-card border border-border bg-surface p-5 transition-colors hover:border-border-strong"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-eyebrow uppercase text-sky-deep">{contractEyebrow(contract, t)}</p>
+          <h3 className="mt-1 text-title text-ink">{contractName(contract, locale, t)}</h3>
+          <p className="text-body-s text-ink-secondary">
+            {corridor ? `${windowLabel(corridor, t)} · ${tierLabel}` : tierLabel}
+          </p>
         </div>
-
-        {/* numbers */}
-        <div className="mb-3 grid grid-cols-3 gap-2">
-          <div className="text-center">
-            <p className="font-body text-[11px] uppercase tracking-wide text-insu-muted">Paid</p>
-            <p className="mt-0.5 font-mono text-sm text-insu-text">{formatCurrency(premium_paid_usd)}</p>
-          </div>
-          <div className="text-center">
-            <p className="font-body text-[11px] uppercase tracking-wide text-insu-muted">
-              {isPaidOut ? 'Received' : 'Payout'}
-            </p>
-            <p className="mt-0.5 font-mono text-sm text-insu-green">{formatCurrency(payout_amount_usd)}</p>
-          </div>
-          <div className="text-center">
-            <p className="font-body text-[11px] uppercase tracking-wide text-insu-muted">
-              Expires
-            </p>
-            <p className="mt-0.5 font-body text-sm text-insu-text">{dateStr}</p>
-          </div>
-        </div>
-
-        {contract.is_recurring && (
-          <CoverageDates
-            corridor={contract.corridor}
-            start={purchased_at}
-            periodDays={totalDays}
-            className="mb-3 text-[11px]"
-          />
-        )}
-
-        {/* progress bar — active only */}
-        {status === 'active' && (
-          <div>
-            <div className="h-[3px] overflow-hidden rounded-full bg-[#0d1117]">
-              <div
-                className="h-full rounded-full bg-insu-accent transition-all"
-                style={{ width: `${elapsedPct}%` }}
-              />
-            </div>
-            <p className="mt-1 font-body text-[11px] text-insu-muted">
-              {daysLeft} days of protection left ({totalDays}-day window)
-            </p>
-            {position.current_value_usd != null && (
-              <p className="mt-1 font-body text-[11px] text-insu-muted">
-                Current value: <span className="font-mono text-insu-text">{formatCurrency(position.current_value_usd)}</span>
-              </p>
-            )}
-          </div>
-        )}
+        <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
       </div>
+
+      {isActive && contract.trigger_condition && kind !== 'other' && (
+        <div className="mt-4 rounded-m bg-surface-raised p-4">
+          <LiveCondition
+            contract={{ trigger_type: contract.trigger_type, trigger_condition: contract.trigger_condition, corridor: corridor ? { window_start: corridor.window_start, window_end: corridor.window_end, baseline_duration_s: corridor.baseline_duration_s ?? null } : null }}
+            reading={position.latest_reading ?? null}
+            compact
+            owned
+            showBadge={false}
+          />
+        </div>
+      )}
+
+      <dl className="mt-4 grid grid-cols-3 gap-2">
+        <div>
+          <dt className="text-caption text-ink-muted">{t('dashboard.paidLabel')}</dt>
+          <dd className="font-display text-[26px] leading-tight text-ink">{money(premium_paid_usd, currency)}</dd>
+        </div>
+        <div>
+          <dt className="text-caption text-ink-muted">{isActive ? t('dashboard.receiveLabel') : t('dashboard.receivedLabel')}</dt>
+          <dd className="font-display text-[26px] leading-tight text-pay">{money(receiveLeft, currency)}</dd>
+        </div>
+        <div>
+          <dt className="text-caption text-ink-muted">{isActive ? t('dashboard.endsLabel') : t('dashboard.endedLabel')}</dt>
+          <dd className="font-display text-[26px] leading-tight text-ink">{formatShortDay(expires_at, locale)}</dd>
+        </div>
+      </dl>
+
+      {isActive && (
+        <div className="mt-4 space-y-1.5">
+          <DayStrip total={total} current={current} label={`${t('dashboard.dayStrip')}: ${progress}`} />
+          <p className="text-caption text-ink-muted">{progress}</p>
+        </div>
+      )}
     </Link>
   )
 }

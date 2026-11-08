@@ -2,38 +2,41 @@
 
 import { Search, X } from 'lucide-react'
 import { usePathname, useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useSearch } from '@/lib/search-context'
 
 export default function SearchInput() {
+  const t = useTranslations('nav')
   const { query, setQuery } = useSearch()
   const router = useRouter()
   const pathname = usePathname()
 
   function update(value: string) {
     setQuery(value)
-    // Results only render on the home browse page. If the user starts a search
-    // from anywhere else, send them home so matches are actually visible.
+    // Results only render on the home page. If the search starts anywhere
+    // else, send them home so matches are actually visible.
     if (value && pathname !== '/') router.push('/')
   }
 
   return (
     <>
-      <Search size={13} className="flex-shrink-0 text-insu-muted" />
+      <Search size={16} className="shrink-0 text-ink-muted" aria-hidden />
       <input
-        type="text"
+        type="search"
         value={query}
         onChange={(e) => update(e.target.value)}
-        aria-label="Search contracts"
-        placeholder="Search contracts, events, locations…"
-        className="w-full min-w-0 flex-1 bg-transparent font-body text-[13.5px] text-insu-text outline-none placeholder:text-insu-muted"
+        aria-label={t('searchLabel')}
+        placeholder={t('searchPlaceholder')}
+        className="w-full min-w-0 flex-1 bg-transparent text-body-s text-ink outline-none placeholder:text-ink-muted [&::-webkit-search-cancel-button]:hidden"
       />
       {query && (
         <button
+          type="button"
           onClick={() => setQuery('')}
-          aria-label="Clear search"
-          className="flex-shrink-0 text-insu-muted transition-colors hover:text-insu-text"
+          aria-label={t('clearSearch')}
+          className="-mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-muted hover:text-ink"
         >
-          <X size={13} />
+          <X size={16} aria-hidden />
         </button>
       )}
     </>

@@ -59,25 +59,25 @@ export function PayoutQueue({ payouts: initialPayouts }: Props) {
 
   return (
     <div>
-      <h1 className="mb-5 font-display text-2xl tracking-wide text-insu-text">Payout Queue</h1>
+      <h1 className="mb-5 font-display text-2xl tracking-wide text-ink">Payout Queue</h1>
 
       {/* Stats strip */}
       <div className="mb-6 grid grid-cols-4 gap-4">
-        <div className={cn(statCls, 'border-white/[0.07]')}>
-          <p className="mb-1 text-[11px] uppercase tracking-wider text-insu-muted">Total</p>
-          <p className="font-mono text-2xl text-insu-text">{payouts.length}</p>
+        <div className={cn(statCls, 'border-border')}>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-ink-muted">Total</p>
+          <p className="tabular-nums text-2xl text-ink">{payouts.length}</p>
         </div>
-        <div className={cn(statCls, 'border-insu-green/30')}>
-          <p className="mb-1 text-[11px] uppercase tracking-wider text-insu-muted">Completed</p>
-          <p className="font-mono text-2xl text-insu-green">{completedCount}</p>
+        <div className={cn(statCls, 'border-pay')}>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-ink-muted">Completed</p>
+          <p className="tabular-nums text-2xl text-pay">{completedCount}</p>
         </div>
-        <div className={cn(statCls, processingCount > 0 ? 'border-insu-accent/40' : 'border-white/[0.07]')}>
-          <p className="mb-1 text-[11px] uppercase tracking-wider text-insu-muted">Processing</p>
-          <p className={cn('font-mono text-2xl', processingCount > 0 ? 'text-insu-accent' : 'text-insu-text')}>{processingCount}</p>
+        <div className={cn(statCls, processingCount > 0 ? 'border-sky' : 'border-border')}>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-ink-muted">Processing</p>
+          <p className={cn('tabular-nums text-2xl', processingCount > 0 ? 'text-sky' : 'text-ink')}>{processingCount}</p>
         </div>
-        <div className={cn(statCls, 'border-white/[0.07]')}>
-          <p className="mb-1 text-[11px] uppercase tracking-wider text-insu-muted">Volume</p>
-          <p className="font-mono text-2xl text-insu-text">${(totalVolume / 1000).toFixed(0)}k</p>
+        <div className={cn(statCls, 'border-border')}>
+          <p className="mb-1 text-[11px] uppercase tracking-wider text-ink-muted">Volume</p>
+          <p className="tabular-nums text-2xl text-ink">${(totalVolume / 1000).toFixed(0)}k</p>
         </div>
       </div>
 
@@ -90,8 +90,8 @@ export function PayoutQueue({ payouts: initialPayouts }: Props) {
             className={cn(
               'rounded-md px-3 py-1.5 text-[13px] font-medium capitalize transition-colors',
               filter === f
-                ? 'bg-white/[0.07] text-insu-text'
-                : 'text-insu-muted hover:text-insu-dim',
+                ? 'bg-surface-raised text-ink'
+                : 'text-ink-muted hover:text-ink-secondary',
             )}
           >
             {f === 'processing' ? `Processing (${processingCount})` : f === 'all' ? 'All' : 'Completed'}
@@ -100,36 +100,36 @@ export function PayoutQueue({ payouts: initialPayouts }: Props) {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-white/[0.07] overflow-hidden">
-        <div className="grid grid-cols-[1fr_130px_80px_90px_90px_80px] gap-3 border-b border-white/[0.07] bg-white/[0.02] px-4 py-2.5 text-[11px] uppercase tracking-wider text-insu-muted">
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="grid grid-cols-[1fr_130px_80px_90px_90px_80px] gap-3 border-b border-border bg-surface-raised px-4 py-2.5 text-[11px] uppercase tracking-wider text-ink-muted">
           <span>User / Contract</span><span>Transfer ID</span><span>Amount</span><span>Created</span><span>Status</span><span>Action</span>
         </div>
 
         {filtered.length === 0 && (
-          <p className="px-4 py-8 text-center text-sm text-insu-muted">No payouts found.</p>
+          <p className="px-4 py-8 text-center text-sm text-ink-muted">No payouts found.</p>
         )}
 
         {filtered.map((payout) => (
           <div key={payout.id}>
             <div
               className={cn(
-                'grid grid-cols-[1fr_130px_80px_90px_90px_80px] gap-3 border-b border-white/[0.04] px-4 py-3 text-sm last:border-0 items-center',
-                payout.status === 'processing' && 'border-insu-accent/20',
+                'grid grid-cols-[1fr_130px_80px_90px_90px_80px] gap-3 border-b border-border px-4 py-3 text-sm last:border-0 items-center',
+                payout.status === 'processing' && 'border-sky',
                 payout.status === 'completed' && 'opacity-65',
               )}
             >
               <div>
-                <p className="font-medium text-insu-text">{payout.userFullName ?? 'Unknown'}</p>
-                <p className="text-[12px] text-insu-muted">{payout.contractTitle}</p>
+                <p className="font-medium text-ink">{payout.userFullName ?? 'Unknown'}</p>
+                <p className="text-[12px] text-ink-muted">{payout.contractTitle}</p>
               </div>
-              <span className="truncate font-mono text-[12px] text-insu-muted">
+              <span className="truncate tabular-nums text-[12px] text-ink-muted">
                 {payout.transfer_id ?? '—'}
               </span>
-              <span className="font-mono text-insu-green">${payout.amount_usd.toLocaleString()} USD</span>
-              <span className="text-insu-muted">{new Date(payout.created_at).toLocaleDateString()}</span>
+              <span className="tabular-nums text-pay">${payout.amount_usd.toLocaleString()} USD</span>
+              <span className="text-ink-muted">{new Date(payout.created_at).toLocaleDateString()}</span>
               <span className={cn(
                 'rounded px-2 py-0.5 text-[12px] font-medium w-fit',
-                payout.status === 'completed' ? 'bg-insu-green/10 text-insu-green' : 'bg-insu-accent/10 text-insu-accent',
+                payout.status === 'completed' ? 'bg-pay-bg text-pay' : 'bg-surface-raised text-sky',
               )}>
                 {payout.status}
               </span>
@@ -138,7 +138,7 @@ export function PayoutQueue({ payouts: initialPayouts }: Props) {
                   <button
                     onClick={() => handleRetry(payout.id)}
                     disabled={retrying === payout.id}
-                    className="rounded-md bg-insu-accent px-3 py-1 text-[13px] font-bold text-bg disabled:opacity-50 hover:bg-[#f7b84a]"
+                    className="rounded-md bg-sky px-3 py-1 text-[13px] font-bold text-on-sky disabled:opacity-50 hover:bg-sky-deep"
                   >
                     {retrying === payout.id ? '…' : 'Retry'}
                   </button>
@@ -146,7 +146,7 @@ export function PayoutQueue({ payouts: initialPayouts }: Props) {
               </div>
             </div>
             {errors[payout.id] && (
-              <div className="border-b border-white/[0.04] bg-red-500/5 px-4 py-2 text-[13px] text-red-400">
+              <div className="border-b border-border bg-danger-bg px-4 py-2 text-[13px] text-danger">
                 {errors[payout.id]}
               </div>
             )}

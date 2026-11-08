@@ -1,64 +1,67 @@
 import { describe, it, expect } from 'vitest'
-import { partitionByLaunchStage, groupLiveContracts } from '@/lib/launch'
+import { partitionByLaunchStage, homeSections, upcomingWindow } from '@/lib/launch'
 import type { ContractWithTiers } from '@/lib/types'
 
-function makeContract(overrides: Record<string, unknown>): ContractWithTiers {
+function contract(over: Partial<ContractWithTiers> & { id: string }): ContractWithTiers {
   return {
-    id: crypto.randomUUID(),
-    slug: 's',
-    title: 't',
+    slug: over.id,
+    title: over.id,
     trigger_type: 'urban',
-    launch_stage: 'live',
-    location: { city: 'Mexico City', country: 'MX' },
-    corridor: null,
+    location: { lat: 0, lng: 0, city: 'Mexico City', country: 'MX' },
     coverage_tiers: [],
-    category: { id: '1', slug: 'urban', name: 'Urban', color: '#fff', display_order: 1, icon_url: null },
-    ...overrides,
+    corridor: null,
+    ...over,
   } as unknown as ContractWithTiers
 }
 
+const corridor = (road: string, start: string) =>
+  ({ road, name: road, window_start: start, window_end: '10:00:00' }) as ContractWithTiers['corridor']
+
 describe('partitionByLaunchStage', () => {
-  it('splits live vs coming_soon, defaulting missing stage to live', () => {
-    const live = makeContract({})
-    const soon = makeContract({ launch_stage: 'coming_soon' })
-    const legacy = makeContract({ launch_stage: undefined })
-    const result = partitionByLaunchStage([live, soon, legacy])
-    expect(result.live).toEqual([live, legacy])
-    expect(result.comingSoon).toEqual([soon])
+  it('splits coming-soon rows from live ones and treats a missing stage as live', () => {
+    const { live, comingSoon } = partitionByLaunchStage([
+      { id: 'a', launch_stage: 'live' },
+      { id: 'b', launch_stage: 'coming_soon' },
+      { id: 'c' },
+    ])
+    expect(live.map((c) => c.id)).toEqual(['a', 'c'])
+    expect(comingSoon.map((c) => c.id)).toEqual(['b'])
   })
 })
 
-describe('groupLiveContracts', () => {
-  it('groups traffic per city (Mexico City first), then gas, then flood/air', () => {
-    const cdmx = makeContract({ trigger_type: 'urban', corridor: { id: 'c1', road: 'Reforma' } })
-    const guate = makeContract({
-      trigger_type: 'urban',
-      corridor: { id: 'c2', road: 'CA-1' },
-      location: { city: 'Guatemala City', country: 'GT' },
-    })
-    const gas = makeContract({ trigger_type: 'fuel', corridor: null })
-    const flood = makeContract({ trigger_type: 'flood', corridor: null })
-    const air = makeContract({ trigger_type: 'air_quality', corridor: null })
+describe('homeSections', () => {
+  const am = contract({ id: 'am', corridor: corridor('Periférico Sur', '07:00:00') })
+  const pm = contract({ id: 'pm', corridor: corridor('Periférico Sur', '17:00:00') })
+  const viaducto = contract({ id: 'via', corridor: corridor('Viaducto', '07:00:00') })
+  const air = contract({ id: 'air', trigger_type: 'air_quality' })
+  const gas = contract({ id: 'gas', trigger_type: 'fuel' })
+  const flood = contract({ id: 'flood', trigger_type: 'flood' })
+  const gt = contract({
+    id: 'gt',
+    corridor: corridor('Roosevelt', '07:00:00'),
+    location: { lat: 0, lng: 0, city: 'Guatemala City', country: 'GT' },
+  })
 
-    const groups = groupLiveContracts([guate, gas, flood, air, cdmx])
-    expect(groups.map((g) => g.key)).toEqual([
-      'traffic-Mexico City', 'traffic-Guatemala City', 'gas', 'air-flood',
+  it('pairs each road once and orders the rest air, rain, gas', () => {
+    const s = homeSections([gas, am, viaducto, flood, pm, air, gt], 'cdmx')
+    expect(s.routes.map((r) => [r.road, r.morning?.id, r.evening?.id])).toEqual([
+      ['Periférico Sur', 'am', 'pm'],
+      ['Viaducto', 'via', undefined],
     ])
-    expect(groups[0].contracts).toEqual([cdmx])
-    expect(groups[1].contracts).toEqual([guate])
-    expect(groups[2].contracts).toEqual([gas])
-    expect(groups[3].contracts).toEqual([flood, air])
+    expect(s.others.map((c) => c.id)).toEqual(['air', 'flood', 'gas'])
   })
 
-  it('puts unmatched live contracts in a trailing group instead of dropping them', () => {
-    const other = makeContract({ trigger_type: 'weather', corridor: null })
-    const groups = groupLiveContracts([other])
-    expect(groups).toHaveLength(1)
-    expect(groups[0].key).toBe('more')
-    expect(groups[0].contracts).toEqual([other])
+  it('scopes to the selected city', () => {
+    const s = homeSections([am, gt], 'guatemala_city')
+    expect(s.routes.map((r) => r.road)).toEqual(['Roosevelt'])
+    expect(s.others).toEqual([])
   })
+})
 
-  it('omits empty groups', () => {
-    expect(groupLiveContracts([])).toEqual([])
+describe('upcomingWindow', () => {
+  it('shows the evening window from 10:00 to 20:00 market time, else the morning', () => {
+    expect(upcomingWindow(new Date('2026-11-07T14:00:00Z'))).toBe('morning') // 08:00 local
+    expect(upcomingWindow(new Date('2026-11-07T18:00:00Z'))).toBe('evening') // 12:00 local
+    expect(upcomingWindow(new Date('2026-11-08T03:00:00Z'))).toBe('morning') // 21:00 local
   })
 })

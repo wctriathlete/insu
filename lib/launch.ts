@@ -1,15 +1,5 @@
-import type { ContractWithTiers } from './types'
-
-/** One browse-page section of live products. `categorySlug` reuses the
- *  existing category color styling in ContractSection. */
-export interface ProductGroup {
-  key: string
-  title: string
-  categorySlug: string
-  icon: string
-  description: string
-  contracts: ContractWithTiers[]
-}
+import type { CitySlug, ContractWithTiers } from './types'
+import { citySlugOf, commuteWindowOf, productKind } from './contracts/display'
 
 /** Missing/unknown stage counts as live so pre-migration rows keep working. */
 export function partitionByLaunchStage<T extends { launch_stage?: string }>(
@@ -24,64 +14,47 @@ export function partitionByLaunchStage<T extends { launch_stage?: string }>(
   return { live, comingSoon }
 }
 
-/** Order live products the way a new user should read them:
- *  traffic per city (home market first), then gas, then flood & air. */
-export function groupLiveContracts(live: ContractWithTiers[]): ProductGroup[] {
-  const groups: ProductGroup[] = []
+/** One corridor road with its morning/evening protections. */
+export interface RoutePair {
+  road: string
+  morning: ContractWithTiers | null
+  evening: ContractWithTiers | null
+}
 
-  const traffic = live.filter((c) => c.trigger_type === 'urban' && c.corridor)
-  const cities = [...new Set(traffic.map((c) => c.location?.city ?? 'Other'))].sort(
-    (a, b) => (a === 'Mexico City' ? -1 : b === 'Mexico City' ? 1 : a.localeCompare(b)),
-  )
-  for (const city of cities) {
-    groups.push({
-      key: `traffic-${city}`,
-      title: `Traffic protection — ${city}`,
-      categorySlug: 'urban',
-      icon: '🚗',
-      description: 'Rush-hour delay coverage · Pays when your trip runs far over typical',
-      contracts: traffic.filter((c) => (c.location?.city ?? 'Other') === city),
-    })
+export interface HomeSections {
+  routes: RoutePair[]
+  /** Air, rain and gas for the city, in that order. */
+  others: ContractWithTiers[]
+}
+
+const OTHER_ORDER = ['air_quality', 'flood', 'fuel'] as const
+
+/**
+ * Home is "one offer per thing we watch in the selected city" (handoff §6.2):
+ * every corridor road once (as a morning/evening pair), then air, rain, gas.
+ */
+export function homeSections(live: ContractWithTiers[], city: CitySlug): HomeSections {
+  const inCity = live.filter((c) => citySlugOf(c) === city)
+
+  const byRoad = new Map<string, RoutePair>()
+  for (const c of inCity) {
+    if (productKind(c) !== 'traffic' || !c.corridor) continue
+    const road = c.corridor.road
+    const pair = byRoad.get(road) ?? { road, morning: null, evening: null }
+    pair[commuteWindowOf(c.corridor)] = c
+    byRoad.set(road, pair)
   }
+  const routes = [...byRoad.values()].sort((a, b) => a.road.localeCompare(b.road))
 
-  const gas = live.filter((c) => c.trigger_type === 'fuel')
-  if (gas.length > 0) {
-    groups.push({
-      key: 'gas',
-      title: 'Gas prices',
-      categorySlug: 'experiences',
-      icon: '⛽',
-      description: 'Pump-price protection · Pays when fuel spikes',
-      contracts: gas,
-    })
-  }
+  const others = inCity
+    .filter((c) => (OTHER_ORDER as readonly string[]).includes(productKind(c)))
+    .sort((a, b) => OTHER_ORDER.indexOf(productKind(a) as never) - OTHER_ORDER.indexOf(productKind(b) as never))
 
-  const airFlood = live.filter(
-    (c) => c.trigger_type === 'flood' || c.trigger_type === 'air_quality',
-  )
-  if (airFlood.length > 0) {
-    groups.push({
-      key: 'air-flood',
-      title: 'Flood & Air quality',
-      categorySlug: 'nature',
-      icon: '🌧️',
-      description: 'Heavy rain · Air-quality contingency',
-      contracts: airFlood,
-    })
-  }
+  return { routes, others }
+}
 
-  const placed = new Set(groups.flatMap((g) => g.contracts.map((c) => c.id)))
-  const rest = live.filter((c) => !placed.has(c.id))
-  if (rest.length > 0) {
-    groups.push({
-      key: 'more',
-      title: 'More coverage',
-      categorySlug: 'urban',
-      icon: '🛡️',
-      description: 'Other live products',
-      contracts: rest,
-    })
-  }
-
-  return groups
+/** The window to show first: the next commute that hasn't ended yet (market time). */
+export function upcomingWindow(now: Date = new Date()): 'morning' | 'evening' {
+  const hour = new Date(now.getTime() - 6 * 3_600_000).getUTCHours()
+  return hour >= 10 && hour < 20 ? 'evening' : 'morning'
 }

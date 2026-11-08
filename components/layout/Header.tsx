@@ -1,12 +1,32 @@
 import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
+import { ArrowLeft, Bell, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import SearchInput from './SearchInput'
-import LogoutButton from './LogoutButton'
-import MobileMenu from './MobileMenu'
-import NotificationBell from './NotificationBell'
 import { getUnreadCount } from '@/lib/actions/notifications'
+import { InsuLogo } from '@/components/sereno/Logo'
+import SearchInput from './SearchInput'
+import LanguageToggle from './LanguageToggle'
+import { cn } from '@/lib/utils'
 
-export default async function Header() {
+interface Props {
+  /** Phone top row shows a back button instead of the logo. */
+  back?: { href: string }
+  /** Hide the desktop search field (it only filters the home page). */
+  hideSearch?: boolean
+}
+
+const iconBtn =
+  'relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-ink hover:bg-surface-raised'
+
+/**
+ * Global chrome (handoff §6.1). Phones get a plain top row — back or logo,
+ * ES · EN, avisos, profile — with no sticky blurred bar; the TabBar handles
+ * navigation. Desktop gets logo + nav + secondary search + auth actions.
+ */
+export default async function Header({ back, hideSearch }: Props = {}) {
+  const t = await getTranslations('nav')
+  const tc = await getTranslations('common')
+
   let userId: string | null = null
   let isAdmin = false
   let unread = 0
@@ -15,104 +35,115 @@ export default async function Header() {
     const { data: { user } } = await supabase.auth.getUser()
     userId = user?.id ?? null
     if (userId) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .single()
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', userId).single()
       isAdmin = (profile as { role: string } | null)?.role === 'admin'
       unread = await getUnreadCount()
     }
   } catch {
-    // Supabase not configured — render unauthenticated header
+    // Supabase not configured — render the signed-out header
   }
 
-  return (
-    <header className="sticky top-0 z-50 flex h-[60px] items-center gap-3 border-b border-white/[0.07] bg-bg/85 px-4 backdrop-blur-xl sm:gap-5 sm:px-8">
-      {/* Logo */}
-      <Link href="/" className="flex flex-shrink-0 items-center gap-2.5">
-        <svg width="48" height="18" viewBox="0 62 404 152" fill="none" aria-hidden className="h-[18px] w-[40px] sm:w-[48px]">
-          <polygon points="0,210 0,122 112,66 212,122 212,210" fill="#e8edf5" />
-          <polygon points="228,210 270,66 400,66 358,210" fill="#f5a623" />
-        </svg>
-        <span className="font-display text-[22px] tracking-[4px] text-insu-text sm:text-[26px]">
-          INSU
-        </span>
-        <div className="mx-1 hidden h-5 w-px bg-white/[0.07] lg:block" />
-        <span className="hidden text-[11px] font-medium uppercase leading-tight tracking-wide text-insu-muted lg:block">
-          Everyday Risk,
-          <br />
-          Instant Protection
-        </span>
-      </Link>
+  const bell = userId ? (
+    <Link
+      href="/notifications"
+      aria-label={unread > 0 ? t('notificationsUnread', { count: unread }) : t('notifications')}
+      className={iconBtn}
+    >
+      <Bell size={20} aria-hidden />
+      {unread > 0 && <span aria-hidden className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-sky ring-2 ring-surface" />}
+    </Link>
+  ) : null
 
-      {/* Search */}
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg border border-white/[0.07] bg-white/[0.04] px-3 py-2.5 transition-colors focus-within:border-insu-accent/30 focus-within:bg-insu-accent/[0.03] sm:max-w-[440px] sm:px-3.5">
-        <SearchInput />
+  return (
+    <header className="border-b border-border bg-surface">
+      {/* Phone top row */}
+      <div className="flex h-16 items-center gap-2 px-5 md:hidden">
+        {back ? (
+          <Link href={back.href} aria-label={tc('back')} className={iconBtn}>
+            <ArrowLeft size={20} aria-hidden />
+          </Link>
+        ) : (
+          <Link href="/" aria-label={t('logoHome')} className="flex min-h-touch items-center">
+            <InsuLogo />
+          </Link>
+        )}
+        <div className="flex-1" />
+        <LanguageToggle />
+        {bell}
+        <Link href={userId ? '/profile' : '/auth/login'} aria-label={userId ? t('profile') : t('login')} className={iconBtn}>
+          <User size={20} aria-hidden />
+        </Link>
       </div>
 
-      <div className="hidden flex-1 sm:block" />
+      {/* Desktop */}
+      <div className="mx-auto hidden h-[72px] max-w-[1200px] items-center gap-6 px-6 md:flex">
+        <Link href="/" aria-label={t('logoHome')} className="flex min-h-touch shrink-0 items-center">
+          <InsuLogo />
+        </Link>
+        <nav aria-label={t('main')} className="flex items-center gap-1">
+          {[
+            { href: '/', label: t('browse') },
+            { href: '/how-it-works', label: t('howItWorks') },
+            { href: '/earn', label: t('earn') },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="flex min-h-touch items-center rounded-full px-3 text-body-s font-bold text-ink-secondary hover:bg-surface-raised hover:text-ink"
+            >
+              {l.label}
+            </Link>
+          ))}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="flex min-h-touch items-center rounded-full px-3 text-body-s font-bold text-ink-muted hover:bg-surface-raised hover:text-ink"
+            >
+              {t('admin')}
+            </Link>
+          )}
+        </nav>
 
-      {/* Nav links */}
-      <Link
-        href="/how-it-works"
-        className="hidden items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-insu-dim transition-colors hover:bg-white/[0.05] hover:text-insu-text sm:flex"
-      >
-        How it works
-      </Link>
+        <div className="flex-1" />
 
-      {userId && (
-        <div className="flex-shrink-0">
-          <NotificationBell initialUnread={unread} />
-        </div>
-      )}
+        {!hideSearch && (
+          <div className="flex h-11 w-full max-w-[260px] items-center gap-2 rounded-full border border-border-strong bg-bg px-4 focus-within:border-sky">
+            <SearchInput />
+          </div>
+        )}
 
-      {/* Auth / nav buttons — desktop only; phones use the menu below */}
-      <div className="hidden items-center gap-3 sm:flex">
+        <LanguageToggle />
+
         {userId ? (
-          <>
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="rounded-lg border border-insu-accent/30 px-3 py-1.5 sm:px-4 text-[13px] font-semibold text-insu-accent transition-colors hover:border-insu-accent/60 hover:bg-insu-accent/5"
-              >
-                Admin
-              </Link>
-            )}
+          <div className="flex items-center gap-2">
+            {bell}
             <Link
               href="/dashboard"
-              className="rounded-lg border border-white/[0.07] px-3 py-1.5 sm:px-4 text-[13px] font-semibold text-insu-dim transition-colors hover:border-white/15 hover:text-insu-text"
+              className="flex min-h-touch items-center rounded-full px-3 text-body-s font-bold text-ink hover:bg-surface-raised"
             >
-              Portfolio
+              {t('protections')}
             </Link>
-            <Link
-              href="/profile"
-              className="rounded-lg border border-white/[0.07] px-3 py-1.5 sm:px-4 text-[13px] font-semibold text-insu-dim transition-colors hover:border-white/15 hover:text-insu-text"
-            >
-              Profile
+            <Link href="/profile" aria-label={t('profile')} className={iconBtn}>
+              <User size={20} aria-hidden />
             </Link>
-            <LogoutButton />
-          </>
+          </div>
         ) : (
-          <>
+          <div className="flex items-center gap-2">
             <Link
               href="/auth/login"
-              className="rounded-lg border border-white/[0.07] px-3 py-1.5 sm:px-4 text-[13px] font-semibold text-insu-dim transition-colors hover:border-white/15 hover:text-insu-text"
+              className="flex min-h-touch items-center rounded-full px-3 text-body-s font-bold text-ink hover:bg-surface-raised"
             >
-              Log In
+              {t('login')}
             </Link>
             <Link
               href="/auth/signup"
-              className="rounded-lg bg-insu-accent px-3 py-1.5 sm:px-4 text-[13px] font-bold text-bg transition-all hover:-translate-y-px hover:bg-[#f7b84a] hover:shadow-[0_4px_16px_rgba(245,166,35,0.3)]"
+              className={cn('flex h-11 items-center rounded-full bg-panel px-5 text-body-s font-extrabold text-on-panel hover:opacity-90')}
             >
-              Sign Up
+              {t('signup')}
             </Link>
-          </>
+          </div>
         )}
       </div>
-
-      {/* Mobile hamburger menu (phones only) */}
-      <MobileMenu userId={userId} isAdmin={isAdmin} />
     </header>
   )
 }

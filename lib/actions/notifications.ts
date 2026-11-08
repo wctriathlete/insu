@@ -18,7 +18,7 @@ export async function getUnreadCount(): Promise<number> {
   return count ?? 0
 }
 
-export async function getNotifications(): Promise<Notification[]> {
+export async function getNotifications(limit = 20): Promise<Notification[]> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return []
@@ -27,10 +27,10 @@ export async function getNotifications(): Promise<Notification[]> {
   const db = supabase as any
   const { data } = await db
     .from('notifications')
-    .select('*, contract:contracts(slug)')
+    .select('*, contract:contracts(*, corridor:corridors(*))')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(limit)
   return (data ?? []) as Notification[]
 }
 

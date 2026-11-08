@@ -47,22 +47,22 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
     })
   }
 
-  const inputCls = 'w-full rounded-md border border-white/[0.07] bg-bg px-3 py-2 text-sm text-insu-text focus:border-insu-accent/40 focus:outline-none'
-  const labelCls = 'mb-1 block text-[12px] uppercase tracking-wider text-insu-muted'
+  const inputCls = 'w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-ink focus:border-sky focus:outline-none'
+  const labelCls = 'mb-1 block text-[12px] uppercase tracking-wider text-ink-muted'
 
   return (
     <div className="max-w-lg">
-      <h1 className="mb-1 font-display text-2xl tracking-wide text-insu-text">Trigger Override</h1>
-      <p className="mb-6 text-sm text-insu-muted">Force-settle a contract, bypassing the oracle. This cannot be undone.</p>
+      <h1 className="mb-1 font-display text-2xl tracking-wide text-ink">Trigger Override</h1>
+      <p className="mb-6 text-sm text-ink-muted">Force-settle a contract, bypassing the oracle. This cannot be undone.</p>
 
       {success && (
-        <div className="mb-4 rounded-md border border-insu-green/30 bg-insu-green/10 px-4 py-3 text-sm text-insu-green">
+        <div className="mb-4 rounded-md border border-pay bg-pay-bg px-4 py-3 text-sm text-pay">
           Contract settled successfully. Payouts queued.
         </div>
       )}
 
       {error && (
-        <p className="mb-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="mb-4 rounded-md border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -84,27 +84,27 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
         </div>
 
         {summary && (
-          <div className="rounded-lg border border-white/[0.07] bg-white/[0.02] p-4">
+          <div className="rounded-lg border border-border bg-surface-raised p-4">
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <p className={labelCls}>Active hedgers</p>
-                <p className="font-mono text-insu-text">{summary.hedgerCount}</p>
+                <p className="tabular-nums text-ink">{summary.hedgerCount}</p>
               </div>
               <div>
                 <p className={labelCls}>Total payout</p>
-                <p className="font-mono text-insu-green">${summary.totalPayout.toLocaleString()}</p>
+                <p className="tabular-nums text-pay">${summary.totalPayout.toLocaleString()}</p>
               </div>
               <div>
                 <p className={labelCls}>Oracle</p>
-                <p className="font-mono text-insu-dim">{summary.oracleStatus}</p>
+                <p className="tabular-nums text-ink-secondary">{summary.oracleStatus}</p>
               </div>
               <div>
                 <p className={labelCls}>Trigger type</p>
-                <p className="text-insu-dim">{summary.contract.trigger_type}</p>
+                <p className="text-ink-secondary">{summary.contract.trigger_type}</p>
               </div>
               <div className="col-span-2">
                 <p className={labelCls}>Last reading</p>
-                <p className="text-insu-dim">{summary.lastValue || '—'}</p>
+                <p className="text-ink-secondary">{summary.lastValue || '—'}</p>
               </div>
             </div>
           </div>
@@ -119,12 +119,12 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
               className={cn(
                 'rounded-lg border p-4 text-left transition-colors',
                 outcome === true
-                  ? 'border-insu-green bg-insu-green/10'
-                  : 'border-white/[0.07] hover:border-white/20',
+                  ? 'border-pay bg-pay-bg'
+                  : 'border-border hover:border-border-strong',
               )}
             >
-              <p className="mb-1 text-sm font-bold text-insu-green">⚡ TRIGGER FIRED</p>
-              <p className="text-[13px] text-insu-muted">Hedgers receive payouts. Settles as outcome = true.</p>
+              <p className="mb-1 text-sm font-bold text-pay">⚡ TRIGGER FIRED</p>
+              <p className="text-[13px] text-ink-muted">Hedgers receive payouts. Settles as outcome = true.</p>
             </button>
             <button
               type="button"
@@ -132,12 +132,12 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
               className={cn(
                 'rounded-lg border p-4 text-left transition-colors',
                 outcome === false
-                  ? 'border-insu-dim bg-white/[0.04]'
-                  : 'border-white/[0.07] hover:border-white/20',
+                  ? 'border-ink-secondary bg-surface-raised'
+                  : 'border-border hover:border-border-strong',
               )}
             >
-              <p className="mb-1 text-sm font-bold text-insu-dim">✕ NO TRIGGER</p>
-              <p className="text-[13px] text-insu-muted">No payouts. Providers keep yield. outcome = false.</p>
+              <p className="mb-1 text-sm font-bold text-ink-secondary">✕ NO TRIGGER</p>
+              <p className="text-[13px] text-ink-muted">No payouts. Providers keep yield. outcome = false.</p>
             </button>
           </div>
         </div>
@@ -157,7 +157,7 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
         <button
           type="submit"
           disabled={isPending || outcome === null || !contractId || !reason.trim()}
-          className="w-full rounded-md bg-red-500 py-2.5 text-sm font-bold tracking-wide text-white disabled:opacity-40 hover:bg-red-400"
+          className="w-full rounded-md bg-danger py-2.5 text-sm font-bold tracking-wide text-white disabled:opacity-40 hover:bg-danger"
         >
           {isPending
             ? 'Processing…'
@@ -167,7 +167,7 @@ export function TriggerOverride({ contracts, summaries, initialContractId }: Pro
         </button>
 
         {contractId && outcome !== null && (
-          <p className="text-center text-[13px] text-insu-muted">
+          <p className="text-center text-[13px] text-ink-muted">
             This will immediately settle the contract{outcome ? ` and queue Stripe payouts for ${summary?.hedgerCount ?? '?'} hedgers` : ''}.
           </p>
         )}

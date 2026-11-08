@@ -317,7 +317,7 @@ describe('createHedgerPaymentIntent', () => {
     setupMocks({ recurring: true })
     const { createHedgerPaymentIntent } = await import('@/lib/actions/purchase')
     const result = await createHedgerPaymentIntent('tier-recurring')
-    expect(result).toEqual({ error: 'Choose a protection period' })
+    expect(result).toEqual({ error: 'Choose a protection period', code: 'choosePeriod' })
   })
 
   it('returns clientSecret and the stored expires_at on success', async () => {
@@ -343,6 +343,7 @@ describe('createHedgerPaymentIntent', () => {
     const result = await createHedgerPaymentIntent('tier-basic')
     expect(result).toEqual({
       error: 'You have too many pending purchases. Complete or cancel them before buying again.',
+      code: 'tooManyPending',
     })
     // Stripe and position insert should not have been called
     expect(mockPaymentIntentsCreate).not.toHaveBeenCalled()

@@ -95,6 +95,14 @@ export function ContractForm({ categories, contract }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const [title, setTitle] = useState(contract?.title ?? '')
+  // Sereno naming (handoff §7.2): public names are assembled per locale. Traffic,
+  // air, rain and gas get theirs from the app's messages; these fields name
+  // anything else (coming-soon products) and hold per-locale descriptions.
+  const [citySlug, setCitySlug] = useState<string>(contract?.city_slug ?? '')
+  const [nameEs, setNameEs] = useState(contract?.name_es ?? '')
+  const [nameEn, setNameEn] = useState(contract?.name_en ?? '')
+  const [descriptionEs, setDescriptionEs] = useState(contract?.description_es ?? '')
+  const [descriptionEn, setDescriptionEn] = useState(contract?.description_en ?? '')
   const [description, setDescription] = useState(contract?.description ?? '')
   const [categoryId, setCategoryId] = useState(contract?.category_id ?? categories[0]?.id ?? '')
   const [status, setStatus] = useState<string>(contract?.status ?? 'pending')
@@ -174,6 +182,23 @@ export function ContractForm({ categories, contract }: Props) {
       return
     }
 
+    // Only send naming columns that are set (or already exist on the row), so the
+    // form keeps working against a database without the Sereno migration.
+    function buildNaming(): UpsertContractInput['naming'] {
+      const fields = {
+        city_slug: citySlug || null,
+        name_es: nameEs.trim() || null,
+        name_en: nameEn.trim() || null,
+        description_es: descriptionEs.trim() || null,
+        description_en: descriptionEn.trim() || null,
+      }
+      const out: Record<string, string | null> = {}
+      for (const [k, v] of Object.entries(fields)) {
+        if (v !== null || (contract && k in contract)) out[k] = v
+      }
+      return Object.keys(out).length > 0 ? (out as UpsertContractInput['naming']) : undefined
+    }
+
     const input: UpsertContractInput = {
       ...(contract?.id ? { id: contract.id } : {}),
       title,
@@ -191,6 +216,7 @@ export function ContractForm({ categories, contract }: Props) {
       icon_url: iconUrl || null,
       is_featured: isFeatured,
       launch_stage: launchStage,
+      naming: buildNaming(),
       basic_tier: { premium_usd: Number(basicPremium), payout_usd: Number(basicPayout), max_capacity_usd: Number(basicCapacity) },
       premium_tier: { premium_usd: Number(premPremium), payout_usd: Number(premPayout), max_capacity_usd: Number(premCapacity) },
       ...(corridor ? {
@@ -232,8 +258,8 @@ export function ContractForm({ categories, contract }: Props) {
 
   const canCancelMarket = !!contract?.id && contract.status !== 'settled' && contract.status !== 'cancelled'
 
-  const inputCls = 'w-full rounded-md border border-white/[0.07] bg-bg px-3 py-2 text-sm text-insu-text placeholder:text-insu-muted focus:border-insu-accent/40 focus:outline-none'
-  const labelCls = 'mb-1 block text-[12px] uppercase tracking-wider text-insu-muted'
+  const inputCls = 'w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-sky focus:outline-none'
+  const labelCls = 'mb-1 block text-[12px] uppercase tracking-wider text-ink-muted'
   const selectCls = inputCls + ' cursor-pointer'
 
   const isUserSubmission = contract?.status === 'pending'
@@ -241,23 +267,23 @@ export function ContractForm({ categories, contract }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
-      <h1 className="font-display text-2xl tracking-wide text-insu-text">
+      <h1 className="font-display text-2xl tracking-wide text-ink">
         {contract ? (isUserSubmission ? 'Review Submission' : 'Edit Contract') : 'New Contract'}
       </h1>
 
       {isUserSubmission && (
-        <div className="rounded-md border border-insu-accent/30 bg-insu-accent/[0.06] px-4 py-3 text-sm">
-          <p className="mb-1 font-semibold text-insu-accent">User submission</p>
-          <p className="text-insu-dim">
-            This contract was submitted by a user. Review the pitch below, fill in the trigger condition and coverage tiers, then set status to <strong className="text-insu-text">active</strong> to publish it.
+        <div className="rounded-md border border-sky bg-surface-raised px-4 py-3 text-sm">
+          <p className="mb-1 font-semibold text-sky">User submission</p>
+          <p className="text-ink-secondary">
+            This contract was submitted by a user. Review the pitch below, fill in the trigger condition and coverage tiers, then set status to <strong className="text-ink">active</strong> to publish it.
           </p>
           {!!(contract?.trigger_condition as Record<string, unknown>)?.description && (
-            <p className="mt-2 rounded bg-black/20 px-3 py-2 font-mono text-[13px] text-insu-muted">
+            <p className="mt-2 rounded bg-panel/60 px-3 py-2 tabular-nums text-[13px] text-ink-muted">
               Pitch: &quot;{String((contract.trigger_condition as Record<string, unknown>).description)}&quot;
             </p>
           )}
           {!!(contract?.trigger_condition as Record<string, unknown>)?.proposed_payout && (
-            <p className="mt-1 font-mono text-[13px] text-insu-muted">
+            <p className="mt-1 tabular-nums text-[13px] text-ink-muted">
               Proposed payout: ${String((contract.trigger_condition as Record<string, unknown>).proposed_payout)}
             </p>
           )}
@@ -265,17 +291,54 @@ export function ContractForm({ categories, contract }: Props) {
       )}
 
       {error && (
-        <p className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">{error}</p>
+        <p className="rounded-md border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <div>
-        <label className={labelCls}>Title</label>
-        <input className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <label className={labelCls} htmlFor="cf-title">Internal name</label>
+        <input id="cf-title" className={inputCls} value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <p className="mt-1 text-[12px] text-ink-muted">
+          Admin, Stripe and audit logs only. The app shows names built per language (below).
+        </p>
       </div>
 
+      <fieldset className="space-y-3 rounded-md border border-border p-4">
+        <legend className="px-1 text-[12px] uppercase tracking-wider text-ink-muted">Public name (per language)</legend>
+        <p className="text-[12px] text-ink-muted">
+          Traffic routes use the corridor&apos;s route name; air, rain and gas use the app&apos;s product names.
+          Fill these for anything else (e.g. coming-soon products). Names, never questions.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelCls} htmlFor="cf-name-es">Name (es)</label>
+            <input id="cf-name-es" className={inputCls} value={nameEs} onChange={(e) => setNameEs(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="cf-name-en">Name (en)</label>
+            <input id="cf-name-en" className={inputCls} value={nameEn} onChange={(e) => setNameEn(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="cf-desc-es">Description (es)</label>
+            <textarea id="cf-desc-es" className={inputCls} rows={2} value={descriptionEs} onChange={(e) => setDescriptionEs(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="cf-desc-en">Description (en)</label>
+            <textarea id="cf-desc-en" className={inputCls} rows={2} value={descriptionEn} onChange={(e) => setDescriptionEn(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls} htmlFor="cf-city">City</label>
+            <select id="cf-city" className={inputCls} value={citySlug} onChange={(e) => setCitySlug(e.target.value)}>
+              <option value="">Other (use location city)</option>
+              <option value="cdmx">CDMX</option>
+              <option value="guatemala_city">Ciudad de Guatemala</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
       <div>
-        <label className={labelCls}>Description</label>
-        <textarea className={inputCls} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <label className={labelCls} htmlFor="cf-desc">Legacy description</label>
+        <textarea id="cf-desc" className={inputCls} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -317,8 +380,8 @@ export function ContractForm({ categories, contract }: Props) {
       </div>
 
       {/* Trigger condition block */}
-      <div className="rounded-lg border border-insu-accent/20 bg-insu-accent/[0.03] p-4">
-        <p className="mb-3 text-[12px] uppercase tracking-wider text-insu-accent">
+      <div className="rounded-lg border border-sky bg-surface-raised p-4">
+        <p className="mb-3 text-[12px] uppercase tracking-wider text-sky">
           Trigger Condition — {triggerType}
         </p>
 
@@ -387,7 +450,7 @@ export function ContractForm({ categories, contract }: Props) {
                 onChange={(e) => setCondState((s) => ({ ...s, threshold: e.target.value }))}
               />
             </div>
-            <p className="text-xs text-insu-dim">Region: CDMX (fixed)</p>
+            <p className="text-xs text-ink-secondary">Region: CDMX (fixed)</p>
           </div>
         )}
 
@@ -399,7 +462,7 @@ export function ContractForm({ categories, contract }: Props) {
         )}
 
         {triggerType === 'manual' && (
-          <p className="text-sm text-insu-muted">No oracle condition — settlement is triggered manually via the Trigger Override section.</p>
+          <p className="text-sm text-ink-muted">No oracle condition — settlement is triggered manually via the Trigger Override section.</p>
         )}
 
         {(triggerType === 'air_quality' || triggerType === 'flood') && (
@@ -415,7 +478,7 @@ export function ContractForm({ categories, contract }: Props) {
               required
               onChange={(e) => setCondState((s) => ({ ...s, threshold: e.target.value }))}
             />
-            <p className="mt-1 text-xs text-insu-dim">
+            <p className="mt-1 text-xs text-ink-secondary">
               {triggerType === 'air_quality' ? 'Metric: aqi_imeca ≥ threshold (fixed)' : 'Metric: rain_1h_mm ≥ threshold (fixed)'}
             </p>
           </div>
@@ -444,9 +507,9 @@ export function ContractForm({ categories, contract }: Props) {
 
       {/* Corridor route endpoints (urban contracts only) */}
       {corridor && (
-        <div className="rounded-lg border border-white/[0.07] p-4">
-          <p className="mb-1 text-[12px] uppercase tracking-wider text-insu-muted">Corridor route</p>
-          <p className="mb-3 text-[11px] text-insu-dim">
+        <div className="rounded-lg border border-border p-4">
+          <p className="mb-1 text-[12px] uppercase tracking-wider text-ink-muted">Corridor route</p>
+          <p className="mb-3 text-[11px] text-ink-secondary">
             Origin &amp; destination define the route drawn on the map and measured for traffic.
             Tip: right-click a point in Google Maps to copy its lat, lng. Saving re-fetches the road path.
           </p>
@@ -478,22 +541,22 @@ export function ContractForm({ categories, contract }: Props) {
       </div>
 
       {/* Coverage tiers */}
-      <div className="rounded-lg border border-white/[0.07] p-4">
-        <p className="mb-3 text-[12px] uppercase tracking-wider text-insu-muted">Coverage Tiers (USD)</p>
+      <div className="rounded-lg border border-border p-4">
+        <p className="mb-3 text-[12px] uppercase tracking-wider text-ink-muted">Coverage Tiers (USD)</p>
         <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-3 mb-2">
           <div />
-          <span className="text-[12px] uppercase tracking-wider text-insu-muted">Premium</span>
-          <span className="text-[12px] uppercase tracking-wider text-insu-muted">Payout</span>
-          <span className="text-[12px] uppercase tracking-wider text-insu-muted">Max Capacity</span>
+          <span className="text-[12px] uppercase tracking-wider text-ink-muted">Premium</span>
+          <span className="text-[12px] uppercase tracking-wider text-ink-muted">Payout</span>
+          <span className="text-[12px] uppercase tracking-wider text-ink-muted">Max Capacity</span>
         </div>
         <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-3 mb-2 items-center">
-          <span className="text-sm text-insu-dim">Basic</span>
+          <span className="text-sm text-ink-secondary">Basic</span>
           <input aria-label="Basic premium" className={inputCls} type="number" min="0" step="0.01" value={basicPremium} onChange={(e) => setBasicPremium(e.target.value)} required />
           <input aria-label="Basic payout" className={inputCls} type="number" min="0" step="0.01" value={basicPayout} onChange={(e) => setBasicPayout(e.target.value)} required />
           <input aria-label="Basic max capacity" className={inputCls} type="number" min="0" value={basicCapacity} onChange={(e) => setBasicCapacity(e.target.value)} required />
         </div>
         <div className="grid grid-cols-[60px_1fr_1fr_1fr] gap-3 items-center">
-          <span className="text-sm text-insu-dim">Premium</span>
+          <span className="text-sm text-ink-secondary">Premium</span>
           <input aria-label="Pro premium" className={inputCls} type="number" min="0" step="0.01" value={premPremium} onChange={(e) => setPremPremium(e.target.value)} required />
           <input aria-label="Pro payout" className={inputCls} type="number" min="0" step="0.01" value={premPayout} onChange={(e) => setPremPayout(e.target.value)} required />
           <input aria-label="Pro max capacity" className={inputCls} type="number" min="0" value={premCapacity} onChange={(e) => setPremCapacity(e.target.value)} required />
@@ -503,7 +566,7 @@ export function ContractForm({ categories, contract }: Props) {
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="rounded" />
-          <span className="text-sm text-insu-dim">Featured on homepage</span>
+          <span className="text-sm text-ink-secondary">Featured on homepage</span>
         </label>
       </div>
 
@@ -520,13 +583,13 @@ export function ContractForm({ categories, contract }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
-        <label className="text-[13px] font-medium text-insu-text">Recurring contract</label>
+        <label className="text-[13px] font-medium text-ink">Recurring contract</label>
         <button
           type="button"
           onClick={() => setIsRecurring(v => !v)}
           className={cn(
             'relative h-6 w-11 rounded-full transition-colors',
-            isRecurring ? 'bg-insu-accent' : 'bg-white/10',
+            isRecurring ? 'bg-sky' : 'bg-surface-raised',
           )}
         >
           <span
@@ -536,7 +599,7 @@ export function ContractForm({ categories, contract }: Props) {
             )}
           />
         </button>
-        <span className="text-[13px] text-insu-muted">
+        <span className="text-[13px] text-ink-muted">
           {isRecurring ? 'Rolls over (no deadline)' : 'One-time event (expires at deadline)'}
         </span>
       </div>
@@ -547,7 +610,7 @@ export function ContractForm({ categories, contract }: Props) {
             type="button"
             onClick={handleCancelMarket}
             disabled={isPending}
-            className="rounded-md border border-red-500/30 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
+            className="rounded-md border border-danger px-4 py-2 text-sm text-danger hover:bg-danger-bg disabled:opacity-60"
           >
             Cancel market
           </button>
@@ -555,14 +618,14 @@ export function ContractForm({ categories, contract }: Props) {
         <button
           type="button"
           onClick={() => router.push('/admin/contracts')}
-          className="ml-auto rounded-md border border-white/[0.07] px-4 py-2 text-sm text-insu-dim hover:text-insu-text"
+          className="ml-auto rounded-md border border-border px-4 py-2 text-sm text-ink-secondary hover:text-ink"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-md bg-insu-accent px-5 py-2 text-sm font-bold text-bg disabled:opacity-60 hover:bg-[#f7b84a]"
+          className="rounded-md bg-sky px-5 py-2 text-sm font-bold text-on-sky disabled:opacity-60 hover:bg-sky-deep"
         >
           {isPending ? 'Saving…' : 'Save Contract'}
         </button>

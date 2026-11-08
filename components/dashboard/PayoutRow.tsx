@@ -1,38 +1,37 @@
+'use client'
+
 import Link from 'next/link'
-import { cn, formatCurrency } from '@/lib/utils'
+import { useLocale, useTranslations } from 'next-intl'
+import { formatDay, money } from '@/lib/format'
+import { contractFullName, productKind } from '@/lib/contracts/display'
+import { resolveDisplayCurrency } from '@/lib/currency/resolve'
+import type { DisplayMode } from '@/lib/currency/config'
 import type { PayoutWithContract } from '@/lib/types'
+import type { Locale } from '@/i18n/config'
+import { StatusBadge } from '@/components/sereno/StatusBadge'
+import { ProductIcon } from '@/components/sereno/ProductIcon'
 
-export function PayoutRow({ payout }: { payout: PayoutWithContract }) {
-  const { contract, amount_usd, status, created_at } = payout
-
-  const isCompleted = status === 'completed'
-
-  const badge = isCompleted
-    ? { label: 'COMPLETED', bg: 'bg-[#14532d]', text: 'text-insu-green' }
-    : { label: 'PROCESSING', bg: 'bg-[#2a1f0a]', text: 'text-insu-accent' }
-
-  const dateStr = new Date(created_at).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+/** A payout in "Pagadas"; opens the payout moment. */
+export function PayoutRow({ payout, displayMode }: { payout: PayoutWithContract; displayMode: DisplayMode }) {
+  const t = useTranslations()
+  const locale = useLocale() as Locale
+  const { contract, amount_usd, status, created_at, completed_at } = payout
+  const currency = resolveDisplayCurrency(displayMode, contract.location?.country)
+  const done = status === 'completed'
 
   return (
-    <Link href={`/markets/${contract.slug}`} className="block">
-      <div className="flex items-center justify-between border-b border-white/[0.07] py-3 transition-colors hover:bg-bg-card-hover px-1">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-body text-sm text-insu-text">{contract.title}</p>
-          <p className="mt-0.5 font-body text-[12px] text-insu-muted">{dateStr}</p>
-        </div>
-        <div className="ml-4 flex items-center gap-3">
-          <p className="font-mono text-sm text-insu-green">{formatCurrency(amount_usd)}</p>
-          <span className={cn(
-            'shrink-0 rounded-full px-2 py-0.5 font-mono text-[11px]',
-            badge.bg, badge.text,
-          )}>
-            {badge.label}
-          </span>
-        </div>
+    <Link
+      href={`/payouts/${payout.id}`}
+      className="flex items-center gap-3 rounded-card border border-border bg-surface p-4 transition-colors hover:border-border-strong"
+    >
+      <ProductIcon kind={productKind(contract)} />
+      <div className="min-w-0 flex-1">
+        <p className="text-body-s font-bold text-ink">{contractFullName(contract, locale, t)}</p>
+        <p className="text-caption text-ink-muted">{t('dashboard.paidOn', { date: formatDay(completed_at ?? created_at, locale) })}</p>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <span className="font-display text-[26px] leading-none text-pay">{money(amount_usd, currency)}</span>
+        <StatusBadge tone={done ? 'success' : 'info'}>{done ? t('status.paid') : t('status.processing')}</StatusBadge>
       </div>
     </Link>
   )

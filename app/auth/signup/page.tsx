@@ -1,9 +1,11 @@
-import SignupForm from '@/components/auth/SignupForm'
+import AuthScreen from '@/components/auth/AuthScreen'
+import { safeNext } from '@/lib/auth/safeNext'
 
-export default function SignupPage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-bg px-4">
-      <SignupForm />
-    </main>
-  )
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string; for?: string }>
+}) {
+  const q = await searchParams
+  return <AuthScreen mode="signup" next={safeNext(q.next)} forSlug={q.for ?? null} />
 }

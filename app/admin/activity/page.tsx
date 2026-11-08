@@ -16,8 +16,8 @@ export default async function AdminActivityPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-1 text-lg font-semibold text-insu-text">User activity</h1>
-      <p className="mb-4 text-[13px] text-insu-muted">
+      <h1 className="mb-1 text-lg font-semibold text-ink">User activity</h1>
+      <p className="mb-4 text-[13px] text-ink-muted">
         {users.length} user{users.length === 1 ? '' : 's'} · click a row for the full timeline
       </p>
       <UserActivityTable users={users} />

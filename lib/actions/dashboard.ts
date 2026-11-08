@@ -6,6 +6,7 @@ import type {
   HedgerPositionWithContract,
   ProviderPositionWithContract,
   PayoutWithContract,
+  LatestOracleReading,
 } from '@/lib/types'
 
 export interface DashboardData {
@@ -26,18 +27,18 @@ export async function getDashboardData(userId?: string): Promise<DashboardData> 
   const [hedgerResult, providerResult, payoutsResult] = await Promise.all([
     supabase
       .from('hedger_positions')
-      .select('*, contract:contracts(id, slug, title, trigger_type, status, is_recurring, trigger_condition, corridor:corridors(window_start, window_end)), tier:coverage_tiers(name, base_probability, max_payouts)')
+      .select('*, contract:contracts(*, corridor:corridors(*)), tier:coverage_tiers(name, base_probability, max_payouts)')
       .eq('user_id', userId)
       .in('status', ['active', 'paid_out', 'expired']),
     supabase
       .from('provider_positions')
-      .select('*, contract:contracts(id, slug, title, trigger_type, trigger_deadline, status), tier:coverage_tiers(name)')
+      .select('*, contract:contracts(*, corridor:corridors(*)), tier:coverage_tiers(name)')
       .eq('user_id', userId)
       .in('status', ['active', 'settled']),
     // !inner join excludes payouts with no hedger_position; .eq filters to this user's positions only
     supabase
       .from('payouts')
-      .select('*, contract:contracts(id, slug, title, status), hedger_position:hedger_positions!inner(user_id)')
+      .select('*, contract:contracts(*, corridor:corridors(*)), hedger_position:hedger_positions!inner(user_id)')
       .eq('hedger_position.user_id', userId)
       .order('created_at', { ascending: false }),
   ])
@@ -53,7 +54,7 @@ export async function getDashboardData(userId?: string): Promise<DashboardData> 
   const notCancelled = (row: { contract?: { status?: string } | null }) =>
     row.contract != null && row.contract.status !== 'cancelled'
 
-  const hedgerPositions = ((hedgerResult.data ?? []) as HedgerPositionWithContract[]).filter(notCancelled)
+  const hedgerPositions = ((hedgerResult.data ?? []) as unknown as HedgerPositionWithContract[]).filter(notCancelled)
 
   // Compute live mark-to-market value for active positions on recurring contracts.
   try {
@@ -64,14 +65,15 @@ export async function getDashboardData(userId?: string): Promise<DashboardData> 
       const ids = [...new Set(activeRecurring.map(p => p.contract_id))]
       const { data: readings } = await supabase
         .from('oracle_readings')
-        .select('contract_id, value, read_at')
+        .select('contract_id, value, read_at, source, trigger_met')
         .in('contract_id', ids)
+        .gte('read_at', new Date(Date.now() - 14 * 86_400_000).toISOString())
         .order('read_at', { ascending: false })
 
-      const latestByContract = new Map<string, { value: Record<string, unknown> }>()
+      const latestByContract = new Map<string, LatestOracleReading>()
       for (const row of readings ?? []) {
         if (!latestByContract.has(row.contract_id)) {
-          latestByContract.set(row.contract_id, { value: row.value as Record<string, unknown> })
+          latestByContract.set(row.contract_id, row as unknown as LatestOracleReading)
         }
       }
 
@@ -82,6 +84,8 @@ export async function getDashboardData(userId?: string): Promise<DashboardData> 
             (new Date(pos.expires_at).getTime() - Date.now()) / 86_400_000,
           )
           const reading = latestByContract.get(pos.contract_id) ?? null
+          // The owned card shows the live reading (handoff §5 ProtectionCard).
+          pos.latest_reading = reading
           const p = dailyHazard(
             pos.tier.base_probability,
             reading ? { value: reading.value } : null,
@@ -104,7 +108,7 @@ export async function getDashboardData(userId?: string): Promise<DashboardData> 
 
   return {
     hedgerPositions,
-    providerPositions: ((providerResult.data ?? []) as ProviderPositionWithContract[]).filter(notCancelled),
-    payouts: ((payoutsResult.data ?? []) as PayoutWithContract[]).filter(notCancelled),
+    providerPositions: ((providerResult.data ?? []) as unknown as ProviderPositionWithContract[]).filter(notCancelled),
+    payouts: ((payoutsResult.data ?? []) as unknown as PayoutWithContract[]).filter(notCancelled),
   }
 }

@@ -2,64 +2,123 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --font-bebas: 'Bebas Neue';
-  --font-jetbrains: 'JetBrains Mono';
-  --font-outfit: 'Outfit';
+/*
+ * Sereno tokens. Light is the default; dark applies with data-theme="dark" on
+ * <html> or on any subtree (the payout moment is always dark). data-theme="system"
+ * follows the OS setting. Every text/background pair here meets WCAG AA (4.5:1)
+ * in both themes — don't introduce lighter greys for readable text.
+ */
+:root,
+[data-theme='light'] {
+  --bg: #f5f8fc;
+  --surface: #ffffff;
+  --surface-raised: #eef3fc;
+  --mist: #dce8fb;
+  --border: #dce4f0;
+  --border-strong: #cbd6e8;
+  --track: #e6ecf6;
+  --ink: #14213d;
+  --ink-secondary: #44506b;
+  --ink-muted: #56627c;
+  --sky: #2f6fe4;
+  --sky-deep: #1f55bb;
+  --on-sky: #ffffff;
+  --sun: #f5c84b;
+  --on-sun: #14213d;
+  --caution-bg: #fdf1cf;
+  --caution-ink: #8a5a00;
+  --pay: #12805c;
+  --pay-bg: #e3f3ec;
+  --pay-ink: #0e6b4c;
+  --danger: #b42318;
+  --danger-bg: #fdecea;
+  --panel: #14213d;
+  --on-panel: #e9eff9;
+  --on-panel-muted: #b9c6de;
+  --focus: var(--sky);
+  color-scheme: light;
+}
 
-  --background: 222 47% 6%;
-  --foreground: 210 40% 95%;
-  --card: 222 47% 9%;
-  --card-foreground: 210 40% 95%;
-  --popover: 222 47% 9%;
-  --popover-foreground: 210 40% 95%;
-  --primary: 38 91% 55%;
-  --primary-foreground: 222 47% 6%;
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 95%;
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
-  --accent: 217 33% 17%;
-  --accent-foreground: 210 40% 95%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  --input: 217 33% 17%;
-  --ring: 38 91% 55%;
-  --radius: 0.5rem;
+[data-theme='dark'] {
+  --bg: #0d1526;
+  --surface: #16213a;
+  --surface-raised: #1b2b4d;
+  --mist: #1e2c4a;
+  --border: #2b3b5e;
+  --border-strong: #3b4b70;
+  --track: #243354;
+  --ink: #e9eff9;
+  --ink-secondary: #c3cee2;
+  --ink-muted: #a9b7d0;
+  --sky: #8ab4ff;
+  --sky-deep: #b3ceff;
+  --on-sky: #0d1526;
+  --sun: #f7d36b;
+  --on-sun: #0d1526;
+  --caution-bg: #3a3220;
+  --caution-ink: #f7d36b;
+  --pay: #5fd3a6;
+  --pay-bg: #173a31;
+  --pay-ink: #5fd3a6;
+  --danger: #ff8a80;
+  --danger-bg: #3a1c1c;
+  --panel: #16213a;
+  --on-panel: #e9eff9;
+  --on-panel-muted: #c3cee2;
+  --focus: var(--sky);
+  color-scheme: dark;
+}
+
+/* "Automático": same values as dark, applied only when the OS prefers dark. */
+@media (prefers-color-scheme: dark) {
+  [data-theme='system'] {
+    --bg: #0d1526;
+    --surface: #16213a;
+    --surface-raised: #1b2b4d;
+    --mist: #1e2c4a;
+    --border: #2b3b5e;
+    --border-strong: #3b4b70;
+    --track: #243354;
+    --ink: #e9eff9;
+    --ink-secondary: #c3cee2;
+    --ink-muted: #a9b7d0;
+    --sky: #8ab4ff;
+    --sky-deep: #b3ceff;
+    --on-sky: #0d1526;
+    --sun: #f7d36b;
+    --on-sun: #0d1526;
+    --caution-bg: #3a3220;
+    --caution-ink: #f7d36b;
+    --pay: #5fd3a6;
+    --pay-bg: #173a31;
+    --pay-ink: #5fd3a6;
+    --danger: #ff8a80;
+    --danger-bg: #3a1c1c;
+    --panel: #16213a;
+    --on-panel: #e9eff9;
+    --on-panel-muted: #c3cee2;
+    color-scheme: dark;
+  }
 }
 
 @layer base {
   html {
-    font-size: 17px;
+    font-size: 16px;
   }
 
   body {
-    @apply bg-bg text-insu-text font-body;
+    @apply bg-bg font-sans text-ink;
   }
 
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
-}
-
-@layer utilities {
-  .vol-dot-pulse {
-    animation: vol-pulse 2s ease-in-out infinite;
+  /* Visible focus ring on every interactive element (§9). */
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
-  .card-fadein {
-    animation: fadeUp 0.4s both;
+  /* Headline pattern: the second half of a display title is italic and sky. */
+  .font-display em {
+    font-style: italic;
+    color: var(--sky);
   }
-}
-
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes vol-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.4; transform: scale(0.7); }
 }
