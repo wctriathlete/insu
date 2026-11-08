@@ -2,9 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockGetUser = vi.hoisted(() => vi.fn())
 const mockFrom = vi.hoisted(() => vi.fn())
+const mockGetAal = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({ auth: { getUser: mockGetUser }, from: mockFrom }),
+  createClient: () => ({
+    auth: { getUser: mockGetUser, mfa: { getAuthenticatorAssuranceLevel: mockGetAal } },
+    from: mockFrom,
+  }),
   createServiceClient: () => ({ from: mockFrom }),
 }))
 
@@ -65,12 +69,22 @@ function makeDispatchFrom(contractChain: ReturnType<typeof makeChain>) {
 beforeEach(() => {
   vi.clearAllMocks()
   mockGetUser.mockResolvedValue({ data: { user: { id: 'admin-1' } }, error: null })
+  mockGetAal.mockResolvedValue({ data: { currentLevel: 'aal2' }, error: null })
 })
 
 describe('injectReading', () => {
   it('returns error for invalid JSON', async () => {
     const result = await injectReading('c1', 'not json', 'manual')
     expect(result).toMatchObject({ ok: false, error: expect.stringContaining('Invalid JSON') })
+  })
+
+  it('requires MFA (aal2) before writing a reading', async () => {
+    // A forged reading can fire payouts, so a password alone must not be enough.
+    mockGetAal.mockResolvedValue({ data: { currentLevel: 'aal1' }, error: null })
+    mockFrom.mockImplementation(makeDispatchFrom(makeChain({ data: CONTRACT, error: null })))
+    const result = await injectReading('c1', '{"precipitation_mm":45}', 'manual')
+    expect(result).toEqual({ ok: false, error: 'MFA_REQUIRED' })
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('returns error when contract not found', async () => {

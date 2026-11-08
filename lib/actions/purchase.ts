@@ -318,25 +318,42 @@ export async function activatePositionByPaymentIntent(
       contractId,
     })
   } else {
+    // Guarded on pending_payment so a deposit fills the pool exactly once:
+    // without it, replaying this action with the same payment re-credited
+    // capacity on every call.
     const { data: providerPosition, error: providerError } = await db
       .from('provider_positions')
       .update({ status: 'active' })
       .eq('id', position_id)
       .eq('user_id', user.id)
+      .eq('status', 'pending_payment')
       .select('tier_id, capital_deposited_usd, contract_id')
       .single()
 
+    let contractId: string
     if (providerError || !providerPosition) {
-      return { error: `Failed to activate position: ${providerError?.message ?? 'no row matched'}` }
-    }
+      // Already active — an earlier call or the Stripe webhook activated it
+      // and credited the pool. Success for the depositor, nothing to credit.
+      const { data: existing } = await db
+        .from('provider_positions')
+        .select('status, user_id, contract_id')
+        .eq('id', position_id)
+        .single()
 
-    // Provider deposit fills the pool — increment capacity by the deposited amount.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (db.rpc as any)('increment_tier_capacity', {
-      p_tier_id: providerPosition.tier_id,
-      p_amount: providerPosition.capital_deposited_usd,
-    })
-    await notifyCapacityWatchers(db, providerPosition.contract_id)
+      if (!existing || existing.user_id !== user.id || existing.status !== 'active') {
+        return { error: `Failed to activate position: ${providerError?.message ?? 'no row matched'}` }
+      }
+      contractId = existing.contract_id
+    } else {
+      contractId = providerPosition.contract_id
+      // Provider deposit fills the pool — increment capacity by the deposited amount.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (db.rpc as any)('increment_tier_capacity', {
+        p_tier_id: providerPosition.tier_id,
+        p_amount: providerPosition.capital_deposited_usd,
+      })
+    }
+    await notifyCapacityWatchers(db, contractId)
   }
 
   revalidatePath('/dashboard')
