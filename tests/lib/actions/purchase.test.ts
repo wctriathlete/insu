@@ -14,6 +14,8 @@ const {
   mockOracleReadingsQuery,
   mockServiceHedgerUpdate,
   mockServiceHedgerSelect,
+  mockServiceProviderUpdate,
+  mockServiceProviderSelect,
   mockRpc,
   mockCreateNotification,
 } = vi.hoisted(() => ({
@@ -28,6 +30,8 @@ const {
   mockOracleReadingsQuery: vi.fn(),
   mockServiceHedgerUpdate: vi.fn(),
   mockServiceHedgerSelect: vi.fn(),
+  mockServiceProviderUpdate: vi.fn(),
+  mockServiceProviderSelect: vi.fn(),
   mockRpc: vi.fn(),
   mockCreateNotification: vi.fn(),
 }))
@@ -42,6 +46,12 @@ vi.mock('@/lib/supabase/server', () => ({
         return {
           update: (...args: unknown[]) => mockServiceHedgerUpdate(...args),
           select: (...args: unknown[]) => mockServiceHedgerSelect(...args),
+        }
+      }
+      if (table === 'provider_positions') {
+        return {
+          update: (...args: unknown[]) => mockServiceProviderUpdate(...args),
+          select: (...args: unknown[]) => mockServiceProviderSelect(...args),
         }
       }
       return {}
@@ -477,5 +487,56 @@ describe('activatePositionByPaymentIntent', () => {
 
     expect(result).toEqual({ error: 'Payment not confirmed (status: requires_payment_method)' })
     expect(mockServiceHedgerUpdate).not.toHaveBeenCalled()
+  })
+
+  describe('provider deposits', () => {
+    const activatedDeposit = { tier_id: 'tier-basic', capital_deposited_usd: 10, contract_id: 'c1' }
+
+    beforeEach(() => {
+      mockPaymentIntentsRetrieve.mockResolvedValue({
+        status: 'succeeded',
+        metadata: { position_type: 'provider', position_id: 'prov-1' },
+      })
+    })
+
+    it('activates a pending deposit and credits its capital to the pool once', async () => {
+      const chain = makeUpdateChain({ data: activatedDeposit, error: null })
+      mockServiceProviderUpdate.mockReturnValue(chain)
+
+      const { activatePositionByPaymentIntent } = await import('@/lib/actions/purchase')
+      const result = await activatePositionByPaymentIntent('pi_test_secret_abc')
+
+      expect(result).toEqual({ ok: true, positionId: 'prov-1' })
+      expect(chain.eq).toHaveBeenCalledWith('status', 'pending_payment')
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+      expect(mockRpc).toHaveBeenCalledWith('increment_tier_capacity', { p_tier_id: 'tier-basic', p_amount: 10 })
+    })
+
+    it('does not credit capacity again when the same payment is replayed', async () => {
+      // Already active (an earlier call or the webhook) — the guarded update matches nothing.
+      mockServiceProviderUpdate.mockReturnValue(makeUpdateChain({ data: null, error: { message: 'no rows' } }))
+      mockServiceProviderSelect.mockReturnValue(
+        makeSelectChain({ data: { status: 'active', user_id: 'user-1', contract_id: 'c1' }, error: null }),
+      )
+
+      const { activatePositionByPaymentIntent } = await import('@/lib/actions/purchase')
+      const result = await activatePositionByPaymentIntent('pi_test_secret_abc')
+
+      expect(result).toEqual({ ok: true, positionId: 'prov-1' })
+      expect(mockRpc).not.toHaveBeenCalledWith('increment_tier_capacity', expect.anything())
+    })
+
+    it("rejects a deposit that belongs to someone else", async () => {
+      mockServiceProviderUpdate.mockReturnValue(makeUpdateChain({ data: null, error: { message: 'no rows' } }))
+      mockServiceProviderSelect.mockReturnValue(
+        makeSelectChain({ data: { status: 'active', user_id: 'user-2', contract_id: 'c1' }, error: null }),
+      )
+
+      const { activatePositionByPaymentIntent } = await import('@/lib/actions/purchase')
+      const result = await activatePositionByPaymentIntent('pi_test_secret_abc')
+
+      expect(result).toMatchObject({ error: expect.stringContaining('Failed to activate position') })
+      expect(mockRpc).not.toHaveBeenCalled()
+    })
   })
 })

@@ -56,11 +56,25 @@ export async function POST(req: NextRequest) {
         })
       }
     } else if (position_type === 'provider') {
-      await supabase
+      // Same guard as the hedger branch: whichever of this webhook and the
+      // activation server action flips the row first credits the pool, and
+      // the other is a no-op — so a deposit counts exactly once even if the
+      // depositor closes the tab before the action runs.
+      const { data: position } = await supabase
         .from('provider_positions')
         .update({ status: 'active' })
         .eq('id', position_id)
         .eq('payment_intent_id', pi.id)
+        .eq('status', 'pending_payment')
+        .select('tier_id, capital_deposited_usd')
+        .single()
+
+      if (position) {
+        await supabase.rpc('increment_tier_capacity', {
+          p_tier_id: position.tier_id,
+          p_amount: position.capital_deposited_usd,
+        })
+      }
     }
   }
 

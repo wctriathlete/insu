@@ -31,6 +31,11 @@ export async function injectReading(
   const { data: { user } } = await userClient.auth.getUser()
   if (!user) return { ok: false, error: 'Unauthorized' }
 
+  // Require AAL2 (TOTP MFA), matching assertAdmin: a manual reading can fire
+  // payouts, so an admin password alone must not be enough.
+  const { data: aalData } = await userClient.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aalData?.currentLevel !== 'aal2') return { ok: false, error: 'MFA_REQUIRED' }
+
   const supabase = createServiceClient()
   const { data: profile } = await supabase
     .from('profiles')

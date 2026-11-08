@@ -50,8 +50,10 @@ export async function proxy(request: NextRequest) {
     const today = new Date().toISOString().slice(0, 10)
     if (request.cookies.get('insu_seen')?.value !== today) {
       try {
+        // Stamps auth.uid() server-side — the RPC takes no user id, so it can
+        // only ever touch the caller's own profile.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.rpc as any)('touch_last_seen', { p_user_id: user.id })
+        await (supabase.rpc as any)('touch_last_seen')
         // Set the throttle cookie only after a successful stamp, so a failed
         // write is retried on the next navigation rather than skipped for the day.
         supabaseResponse.cookies.set('insu_seen', today, {

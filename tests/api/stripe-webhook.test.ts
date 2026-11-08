@@ -98,4 +98,31 @@ describe('POST /api/stripe-webhook', () => {
     // fallback must not either.
     expect(mockRpc).not.toHaveBeenCalledWith('increment_tier_capacity', expect.anything())
   })
+
+  describe('provider deposits', () => {
+    beforeEach(() => {
+      mockConstructEvent.mockReturnValue({
+        type: 'payment_intent.succeeded',
+        data: { object: { id: 'pi_test', metadata: { position_type: 'provider', position_id: 'prov-1' } } },
+      })
+    })
+
+    it('activates a pending deposit and credits its capital to the pool', async () => {
+      const chain = makeUpdateChain({ data: { tier_id: 't1', capital_deposited_usd: 10 }, error: null })
+      mockUpdate.mockReturnValue(chain)
+
+      const res = await makeRequest()
+      expect(res.status).toBe(200)
+      expect(chain.eq).toHaveBeenCalledWith('status', 'pending_payment')
+      expect(mockRpc).toHaveBeenCalledWith('increment_tier_capacity', { p_tier_id: 't1', p_amount: 10 })
+    })
+
+    it('does not credit capacity when the deposit was already activated', async () => {
+      mockUpdate.mockReturnValue(makeUpdateChain({ data: null, error: { message: 'no rows' } }))
+
+      const res = await makeRequest()
+      expect(res.status).toBe(200)
+      expect(mockRpc).not.toHaveBeenCalled()
+    })
+  })
 })
