@@ -1,13 +1,10 @@
 import { withSentryConfig } from '@sentry/nextjs'
+import createNextIntlPlugin from 'next-intl/plugin'
+
+const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    // Decorative showcase photos on the How It Works page are served from Unsplash.
-    remotePatterns: [
-      { protocol: 'https', hostname: 'images.unsplash.com' },
-    ],
-  },
   async headers() {
     return [
       {
@@ -53,7 +50,7 @@ const nextConfig = {
   },
 }
 
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(withNextIntl(nextConfig), {
   // For all available options, see:
   // https://www.npmjs.com/package/@sentry/webpack-plugin#options
 

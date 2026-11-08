@@ -52,6 +52,9 @@ export interface Corridor {
   window_end: string
   baseline_duration_s: number | null  // typical in-window seconds; NULL = no baseline yet
   path_polyline: string | null  // encoded road-route polyline; NULL = not backfilled yet
+  /** Place name shown as the contract title (never translated). Optional until the
+   *  Sereno migration is applied; lib/contracts/display.ts derives it from `name`. */
+  route_name?: string | null
   created_at: string
 }
 
@@ -82,7 +85,16 @@ export interface Contract {
   settled_at: string | null
   coverage_tiers?: CoverageTier[]
   corridor?: Corridor | null
+  /** Sereno naming model (handoff §7.2). All optional so pre-migration rows still
+   *  render: lib/contracts/display.ts falls back to derived values. */
+  city_slug?: CitySlug | null
+  name_es?: string | null
+  name_en?: string | null
+  description_es?: string | null
+  description_en?: string | null
 }
+
+export type CitySlug = 'cdmx' | 'guatemala_city'
 
 export interface ContractWithTiers extends Contract {
   coverage_tiers: CoverageTier[]
@@ -173,21 +185,33 @@ export interface Payout {
 }
 
 export interface HedgerPositionWithContract extends HedgerPosition {
-  contract: Pick<Contract, 'id' | 'slug' | 'title' | 'trigger_type' | 'status' | 'is_recurring' | 'trigger_condition'> & {
-    corridor?: Pick<Corridor, 'window_start' | 'window_end'> | null
+  contract: ContractNameFields & Pick<Contract, 'id' | 'slug' | 'title' | 'trigger_type' | 'status' | 'is_recurring' | 'trigger_condition'> & {
+    corridor?: Pick<Corridor, 'name' | 'window_start' | 'window_end' | 'baseline_duration_s' | 'route_name'> | null
   }
   tier: Pick<CoverageTier, 'name' | 'base_probability' | 'max_payouts'>
   current_value_usd?: number | null
+  /** Latest oracle reading for the contract (active recurring positions only). */
+  latest_reading?: LatestOracleReading | null
 }
 
 export interface ProviderPositionWithContract extends ProviderPosition {
-  contract: Pick<Contract, 'id' | 'slug' | 'title' | 'trigger_type' | 'trigger_deadline' | 'status'>
+  contract: ContractNameFields & Pick<Contract, 'id' | 'slug' | 'title' | 'trigger_type' | 'trigger_deadline' | 'status'> & {
+    corridor?: Pick<Corridor, 'name' | 'window_start' | 'window_end' | 'route_name'> | null
+  }
   tier: Pick<CoverageTier, 'name'>
 }
 
 export interface PayoutWithContract extends Payout {
-  contract: Pick<Contract, 'id' | 'slug' | 'title' | 'status'>
+  contract: ContractNameFields & Pick<Contract, 'id' | 'slug' | 'title' | 'status' | 'trigger_type'> & {
+    corridor?: Pick<Corridor, 'name' | 'window_start' | 'window_end' | 'route_name'> | null
+  }
 }
+
+/** The columns lib/contracts/display.ts needs to name a contract in any locale. */
+export type ContractNameFields = Pick<
+  Contract,
+  'title' | 'trigger_type' | 'location' | 'city_slug' | 'name_es' | 'name_en'
+>
 
 export interface AdminAuditLog {
   id: string
@@ -214,6 +238,8 @@ export interface UpsertContractInput {
   icon_url: string | null
   is_featured: boolean
   launch_stage: LaunchStage
+  /** Sereno naming columns; only present keys are written. */
+  naming?: Partial<Pick<Contract, 'city_slug' | 'name_es' | 'name_en' | 'description_es' | 'description_en'>>
   basic_tier: { premium_usd: number; payout_usd: number; max_capacity_usd: number }
   premium_tier: { premium_usd: number; payout_usd: number; max_capacity_usd: number }
   // For corridor (urban) contracts: edit the linked corridor's route endpoints.
@@ -259,6 +285,8 @@ export interface Notification {
   contract_id: string | null
   read_at: string | null
   created_at: string
-  // Optional joined contract for deep-linking from the bell dropdown
-  contract?: { slug: string } | null
+  // Optional joined contract for deep-linking and for naming it in the reader's locale
+  contract?: ({ slug: string } & Partial<ContractNameFields> & {
+    corridor?: Pick<Corridor, 'name' | 'window_start' | 'window_end' | 'route_name'> | null
+  }) | null
 }
