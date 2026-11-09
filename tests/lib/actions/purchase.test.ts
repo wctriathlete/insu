@@ -122,6 +122,8 @@ const mockTier = {
 const mockContract = {
   id: 'c1',
   trigger_type: 'events',
+  status: 'active',
+  launch_stage: 'live',
   is_recurring: false,
   trigger_condition: null,
   trigger_deadline: '2026-12-31T23:59:59Z',
@@ -146,6 +148,8 @@ const mockRecurringTier = {
 const mockRecurringContract = {
   id: 'c2',
   trigger_type: 'urban',
+  status: 'active',
+  launch_stage: 'live',
   is_recurring: true,
   trigger_condition: { metric: 'aqi', threshold: 150, operator: 'gte' },
   trigger_deadline: null,
@@ -175,6 +179,14 @@ function makeOracleChain(reading: unknown | null, firedRows: unknown[] = []) {
         : { data: firedRows, error: null },
     ),
   )
+  return chain
+}
+
+function makeContractChain(contract: unknown) {
+  const chain = { select: vi.fn(), eq: vi.fn(), single: vi.fn() }
+  chain.select.mockReturnValue(chain)
+  chain.eq.mockReturnValue(chain)
+  chain.single.mockResolvedValue({ data: contract, error: null })
   return chain
 }
 
@@ -358,6 +370,23 @@ describe('createHedgerPaymentIntent', () => {
     // Stripe and position insert should not have been called
     expect(mockPaymentIntentsCreate).not.toHaveBeenCalled()
     expect(mockPositionInsert().insert).not.toHaveBeenCalled()
+  })
+
+  describe('live-contract gate', () => {
+    // The market page hides these, but the server action is callable directly
+    // with any tier id (tiers are publicly readable), so it must refuse too.
+    it.each([
+      ['coming soon', { launch_stage: 'coming_soon' }],
+      ['cancelled', { status: 'cancelled' }],
+      ['settled', { status: 'settled' }],
+    ])('rejects a purchase on a %s contract', async (_label, override) => {
+      setupMocks({ recurring: true })
+      mockContractQuery.mockReturnValue(makeContractChain({ ...mockRecurringContract, ...override }))
+      const { createHedgerPaymentIntent } = await import('@/lib/actions/purchase')
+      const result = await createHedgerPaymentIntent('tier-recurring', 1)
+      expect(result).toEqual(expect.objectContaining({ code: 'closed' }))
+      expect(mockPaymentIntentsCreate).not.toHaveBeenCalled()
+    })
   })
 
   describe('trigger-fired purchase gate', () => {
