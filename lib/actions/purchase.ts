@@ -56,11 +56,18 @@ export async function createHedgerPaymentIntent(
 
   const { data: contract, error: contractError } = await supabase
     .from('contracts')
-    .select('id, is_recurring, trigger_condition, trigger_deadline, created_at')
+    .select('id, status, launch_stage, is_recurring, trigger_condition, trigger_deadline, created_at')
     .eq('id', tier.contract_id)
     .single()
 
   if (contractError || !contract) return { error: 'Contract not found', code: 'contractNotFound' }
+
+  // Only live, open contracts are buyable. The market page already hides
+  // coming-soon and closed contracts, but tier ids are publicly readable, so
+  // this action must refuse them too.
+  if (contract.status !== 'active' || contract.launch_stage === 'coming_soon') {
+    return { error: 'This protection is no longer open', code: 'closed' }
+  }
 
   const isRecurring = contract.is_recurring
 
