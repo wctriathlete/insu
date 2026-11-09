@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { createNotification } from '@/lib/notifications/create'
 
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
         .eq('id', position_id)
         .eq('payment_intent_id', pi.id)
         .eq('status', 'pending_payment')
-        .select('tier_id, premium_paid_usd, contract_id')
+        .select('tier_id, premium_paid_usd, contract_id, user_id')
         .single()
 
       if (position) {
@@ -53,6 +54,15 @@ export async function POST(req: NextRequest) {
         await supabase.rpc('increment_contract_volume', {
           p_contract_id: position.contract_id,
           p_amount: position.premium_paid_usd,
+        })
+        // The buyer may have left before the server action ran, so this path
+        // must tell them too; the status guard means only one path notifies.
+        await createNotification(supabase, {
+          userId: position.user_id,
+          type: 'protection_purchased',
+          title: 'Protection active',
+          body: `Your protection is now active and covering you. Confirmation #${position_id.slice(0, 8).toUpperCase()}.`,
+          contractId: position.contract_id,
         })
       }
     } else if (position_type === 'provider') {

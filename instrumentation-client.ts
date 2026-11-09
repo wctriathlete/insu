@@ -9,3 +9,6 @@ Sentry.init({
   replaysOnErrorSampleRate: 1.0,
   integrations: [Sentry.replayIntegration()],
 })
+
+// Lets Sentry trace App Router navigations, not just the initial page load.
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
