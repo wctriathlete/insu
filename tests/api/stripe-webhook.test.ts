@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const { mockConstructEvent, mockUpdate, mockRpc } = vi.hoisted(() => ({
+const { mockConstructEvent, mockUpdate, mockRpc, mockCreateNotification } = vi.hoisted(() => ({
   mockConstructEvent: vi.fn(),
   mockUpdate: vi.fn(),
   mockRpc: vi.fn(),
+  mockCreateNotification: vi.fn(),
+}))
+
+vi.mock('@/lib/notifications/create', () => ({
+  createNotification: mockCreateNotification,
 }))
 
 vi.mock('stripe', () => ({
@@ -97,6 +102,32 @@ describe('POST /api/stripe-webhook', () => {
     // (the server action) never credits premiums to capacity, so the webhook
     // fallback must not either.
     expect(mockRpc).not.toHaveBeenCalledWith('increment_tier_capacity', expect.anything())
+  })
+
+  it('tells the buyer their protection is active when the webhook activates it', async () => {
+    const chain = makeUpdateChain({
+      data: { tier_id: 't1', premium_paid_usd: 240.27, contract_id: 'c1', user_id: 'u1' },
+      error: null,
+    })
+    mockUpdate.mockReturnValue(chain)
+
+    await makeRequest()
+    // The buyer may have closed the tab before the server action ran, so this
+    // fallback is the only path that can tell them they are covered.
+    expect(chain.select).toHaveBeenCalledWith(expect.stringContaining('user_id'))
+    expect(mockCreateNotification).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      userId: 'u1',
+      type: 'protection_purchased',
+      contractId: 'c1',
+      body: expect.stringContaining('POS-1'),
+    }))
+  })
+
+  it('does not notify when the server action already activated (and notified)', async () => {
+    mockUpdate.mockReturnValue(makeUpdateChain({ data: null, error: { message: 'no rows' } }))
+
+    await makeRequest()
+    expect(mockCreateNotification).not.toHaveBeenCalled()
   })
 
   describe('provider deposits', () => {
