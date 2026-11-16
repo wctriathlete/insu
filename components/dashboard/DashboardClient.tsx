@@ -15,6 +15,7 @@ import { ButtonLink } from '@/components/sereno/Button'
 import { EmptyHouse } from '@/components/sereno/Logo'
 import { ProtectionCard } from './ProtectionCard'
 import { PayoutRow } from './PayoutRow'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 export type DashboardTab = 'active' | 'paid' | 'ended'
 
@@ -32,6 +33,7 @@ interface Props {
  * Capital-provider positions live in Ganar now.
  */
 export function DashboardClient({ userId, hedgerPositions: initial, payouts, initialTab, displayMode }: Props) {
+  const fx = useFxRates()
   const t = useTranslations()
   const router = useRouter()
   const [tab, setTab] = useState<DashboardTab>(initialTab)
@@ -115,7 +117,7 @@ export function DashboardClient({ userId, hedgerPositions: initial, payouts, ini
         <p className="text-body font-bold">{t('dashboard.activeCount', { count: active.length })}</p>
         {active.length > 0 && (
           <p className="mt-1 font-display text-amount">
-            {t('dashboard.couldReceive', { amount: money(remainingUsd, panelCurrency) })}
+            {t('dashboard.couldReceive', { amount: money(remainingUsd, panelCurrency, fx) })}
           </p>
         )}
         <p className="mt-2 text-caption text-on-panel-muted">{t('common.chargedInUsd')}</p>

@@ -57,11 +57,13 @@ function makeDb(opts: {
   tier?: typeof mockTier | null
   contract?: typeof mockContract | null
   reading?: { value: Record<string, unknown> } | null
+  fxRows?: { currency: string; rate: string | number; as_of: string }[]
 } = {}) {
   const contracts = opts.contracts ?? [mockContract]
   const tier = opts.tier !== undefined ? opts.tier : mockTier
   const contract = opts.contract !== undefined ? opts.contract : mockContract
   const reading = opts.reading !== undefined ? opts.reading : null
+  const fxRows = opts.fxRows ?? []
 
   const updateEq = vi.fn().mockResolvedValue({ error: null })
   const update = vi.fn().mockReturnValue({ eq: updateEq })
@@ -80,6 +82,11 @@ function makeDb(opts: {
         const single = vi.fn().mockResolvedValue({ data: tier, error: null })
         const eq = vi.fn().mockReturnValue({ single })
         return { select: vi.fn().mockReturnValue({ eq }), update }
+      }
+      if (table === 'fx_rates') {
+        const order = vi.fn().mockResolvedValue({ data: fxRows, error: null })
+        const gte = vi.fn().mockReturnValue({ order })
+        return { select: vi.fn().mockReturnValue({ gte }) }
       }
       if (table === 'pricing_history') {
         return { insert }
@@ -115,6 +122,13 @@ describe('repriceAll', () => {
     await repriceAll(db)
     const { premium_usd, premium_mxn } = db._update.mock.calls[0][0]
     expect(premium_mxn).toBe(Math.round(premium_usd * FX_RATES.MXN))
+  })
+
+  it('converts premium_mxn at the latest official rate when one is stored', async () => {
+    const db = makeDb({ fxRows: [{ currency: 'MXN', rate: '18.5', as_of: new Date().toISOString().slice(0, 10) }] })
+    await repriceAll(db)
+    const { premium_usd, premium_mxn } = db._update.mock.calls[0][0]
+    expect(premium_mxn).toBe(Math.round(premium_usd * 18.5))
   })
 
   it('inserts a pricing_history row for each tier', async () => {

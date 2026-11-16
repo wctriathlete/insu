@@ -10,9 +10,11 @@ import type { PayoutWithContract } from '@/lib/types'
 import type { Locale } from '@/i18n/config'
 import { StatusBadge } from '@/components/sereno/StatusBadge'
 import { ProductIcon } from '@/components/sereno/ProductIcon'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 /** A payout in "Pagadas"; opens the payout moment. */
 export function PayoutRow({ payout, displayMode }: { payout: PayoutWithContract; displayMode: DisplayMode }) {
+  const fx = useFxRates()
   const t = useTranslations()
   const locale = useLocale() as Locale
   const { contract, amount_usd, status, created_at, completed_at } = payout
@@ -30,7 +32,7 @@ export function PayoutRow({ payout, displayMode }: { payout: PayoutWithContract;
         <p className="text-caption text-ink-muted">{t('dashboard.paidOn', { date: formatDay(completed_at ?? created_at, locale) })}</p>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <span className="font-display text-[26px] leading-none text-pay">{money(amount_usd, currency)}</span>
+        <span className="font-display text-[26px] leading-none text-pay">{money(amount_usd, currency, fx)}</span>
         <StatusBadge tone={done ? 'success' : 'info'}>{done ? t('status.paid') : t('status.processing')}</StatusBadge>
       </div>
     </Link>

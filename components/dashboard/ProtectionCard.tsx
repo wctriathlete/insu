@@ -13,6 +13,7 @@ import type { Locale } from '@/i18n/config'
 import { StatusBadge } from '@/components/sereno/StatusBadge'
 import { DayStrip } from '@/components/sereno/DayStrip'
 import LiveCondition from '@/components/sereno/LiveCondition'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 const DAY_MS = 86_400_000
 
@@ -28,6 +29,7 @@ export function ProtectionCard({
   position: HedgerPositionWithContract
   displayMode: DisplayMode
 }) {
+  const fx = useFxRates()
   const t = useTranslations()
   const locale = useLocale() as Locale
   const { contract, tier, status, premium_paid_usd, payout_amount_usd, purchased_at, expires_at } = position
@@ -109,11 +111,11 @@ export function ProtectionCard({
       <dl className="mt-4 grid grid-cols-3 gap-2">
         <div>
           <dt className="text-caption text-ink-muted">{t('dashboard.paidLabel')}</dt>
-          <dd className="font-display text-[26px] leading-tight text-ink">{money(premium_paid_usd, currency)}</dd>
+          <dd className="font-display text-[26px] leading-tight text-ink">{money(premium_paid_usd, currency, fx)}</dd>
         </div>
         <div>
           <dt className="text-caption text-ink-muted">{isActive ? t('dashboard.receiveLabel') : t('dashboard.receivedLabel')}</dt>
-          <dd className="font-display text-[26px] leading-tight text-pay">{money(receiveLeft, currency)}</dd>
+          <dd className="font-display text-[26px] leading-tight text-pay">{money(receiveLeft, currency, fx)}</dd>
         </div>
         <div>
           <dt className="text-caption text-ink-muted">{isActive ? t('dashboard.endsLabel') : t('dashboard.endedLabel')}</dt>

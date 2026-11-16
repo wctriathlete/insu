@@ -8,6 +8,8 @@ import { SearchProvider } from '@/lib/search-context'
 import Footer from '@/components/layout/Footer'
 import TabBar from '@/components/layout/TabBar'
 import { DEFAULT_THEME, THEME_COOKIE, isTheme } from '@/i18n/config'
+import { FxRatesProvider } from '@/components/currency/FxRatesProvider'
+import { getFxRates } from '@/lib/currency/rates'
 
 const instrumentSerif = Instrument_Serif({
   weight: '400',
@@ -42,16 +44,19 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const locale = await getLocale()
   const raw = (await cookies()).get(THEME_COOKIE)?.value
   const theme = isTheme(raw) ? raw : DEFAULT_THEME
+  const fxRates = await getFxRates()
 
   return (
     <html lang={locale} data-theme={theme} className={`${instrumentSerif.variable} ${manrope.variable}`}>
       <body className="flex min-h-screen flex-col antialiased">
         <NextIntlClientProvider>
-          <SearchProvider>
-            <div className="flex-1">{children}</div>
-            <Footer />
-            <TabBar />
-          </SearchProvider>
+          <FxRatesProvider rates={fxRates}>
+            <SearchProvider>
+              <div className="flex-1">{children}</div>
+              <Footer />
+              <TabBar />
+            </SearchProvider>
+          </FxRatesProvider>
         </NextIntlClientProvider>
       </body>
     </html>

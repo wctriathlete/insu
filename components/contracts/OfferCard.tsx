@@ -12,6 +12,7 @@ import type { Locale } from '@/i18n/config'
 import { ProductIcon } from '@/components/sereno/ProductIcon'
 import { StatusBadge } from '@/components/sereno/StatusBadge'
 import LiveCondition, { conditionBadge } from '@/components/sereno/LiveCondition'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 interface Props {
   contract: ContractWithTiers
@@ -27,13 +28,14 @@ interface Props {
  * there's no "Buy now" button.
  */
 export default function OfferCard({ contract, reading, displayMode, windowSwitch }: Props) {
+  const fx = useFxRates()
   const t = useTranslations()
   const locale = useLocale() as Locale
   const kind = productKind(contract)
   const basic = [...contract.coverage_tiers].sort((a, b) => (a.name === 'basic' ? -1 : b.name === 'basic' ? 1 : 0))[0]
   const badge = conditionBadge(conditionView(contract, reading), t)
   const fmt = (usd: number) => {
-    const p = displayPrice(usd, displayMode, contract.location?.country)
+    const p = displayPrice(usd, displayMode, contract.location?.country, fx)
     return formatMoney(p.amount, p.currency)
   }
 

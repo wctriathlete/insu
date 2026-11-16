@@ -4,6 +4,7 @@ import { dailyHazard, priceTenor, capacityFactor, recurringOracleMultiplier } fr
 import { computeOracleMultiplier } from '@/lib/oracle/multiplier'
 import { periodMenuForContract } from '@/lib/pricing/tenors'
 import { convertFromUsd } from '@/lib/currency/resolve'
+import { loadFxRates, type FxRates } from '@/lib/currency/rates'
 import type { TriggerCondition } from '@/lib/oracle/trigger'
 import type { CoverageTier, Contract } from '@/lib/types'
 
@@ -48,6 +49,7 @@ async function applyReprice(
   contract: Contract,
   oracleMultiplier: number,
   reading: { value: Record<string, unknown> } | null,
+  fx: FxRates,
 ): Promise<void> {
   const oldPremium = tier.premium_usd
   let premiumUsd: number
@@ -72,7 +74,7 @@ async function applyReprice(
     .update({
       premium_usd: premiumUsd,
       // Keep the stored MXN figure in step: purchases copy it into premium_paid_mxn.
-      premium_mxn: convertFromUsd(premiumUsd, 'MXN'),
+      premium_mxn: convertFromUsd(premiumUsd, 'MXN', fx),
       last_priced_at: new Date().toISOString(),
       pricing_inputs: inputs,
     })
@@ -97,12 +99,13 @@ export async function repriceAll(db: DbClient = getClient()): Promise<number> {
 
   if (!contracts) return 0
 
+  const fx = await loadFxRates(db)
   let count = 0
   for (const contract of contracts) {
     const { reading, multiplier } = await resolveReadingAndMultiplier(db, contract)
 
     for (const tier of (contract.coverage_tiers ?? []) as CoverageTier[]) {
-      await applyReprice(db, tier, contract as unknown as Contract, multiplier, reading)
+      await applyReprice(db, tier, contract as unknown as Contract, multiplier, reading, fx)
       count++
     }
   }
@@ -128,5 +131,5 @@ export async function repriceTier(tierId: string, db: DbClient = getClient()): P
 
   const { reading, multiplier } = await resolveReadingAndMultiplier(db, contract)
 
-  await applyReprice(db, tier as unknown as CoverageTier, contract as unknown as Contract, multiplier, reading)
+  await applyReprice(db, tier as unknown as CoverageTier, contract as unknown as Contract, multiplier, reading, await loadFxRates(db))
 }

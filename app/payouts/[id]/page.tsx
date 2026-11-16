@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { contractFullName, productKind } from '@/lib/contracts/display'
 import { formatDay, money, referencePrice } from '@/lib/format'
 import { resolveDisplayCurrency } from '@/lib/currency/resolve'
+import { getFxRates } from '@/lib/currency/rates'
 import type { Contract, Corridor, Payout } from '@/lib/types'
 import type { Locale } from '@/i18n/config'
 import { Eyebrow, DisplayTitle, emphasis } from '@/components/sereno/Typography'
@@ -97,7 +98,7 @@ export default async function PayoutPage({ params }: { params: Promise<{ id: str
         <DisplayTitle size="l" className="mt-2">
           {t.rich(done ? 'payout.title' : 'payout.processingTitle', emphasis)}
         </DisplayTitle>
-        <p className="mt-6 font-display text-amount-xl text-pay">{money(payout.amount_usd, currency)}</p>
+        <p className="mt-6 font-display text-amount-xl text-pay">{money(payout.amount_usd, currency, await getFxRates())}</p>
         <p className="mt-2 text-body text-ink-secondary">
           {done
             ? t('payout.paidOn', { date: formatDay(payout.completed_at ?? payout.created_at, locale) })
