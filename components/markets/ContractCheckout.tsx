@@ -265,7 +265,7 @@ export default function ContractCheckout({
     price == null
       ? null
       : currency !== 'USD'
-        ? t('common.approx', { amount: `${formatMoney(price, 'USD')} USD` })
+        ? t('common.approx', { amount: formatMoney(price, 'USD') })
         : localCurrency
           ? t('common.approx', { amount: money(price, localCurrency) })
           : null

@@ -3,8 +3,8 @@ import { formatDayRange, formatTime, money, referencePrice } from '@/lib/format'
 import { formatMoney } from '@/lib/utils'
 
 describe('Sereno formatting', () => {
-  it('formats money compactly with an unambiguous peso symbol', () => {
-    expect(formatMoney(5)).toBe('$5')
+  it('formats money compactly with unambiguous dollar and peso symbols', () => {
+    expect(formatMoney(5)).toBe('US$5')
     expect(formatMoney(1700, 'MXN')).toBe('MX$1,700')
     expect(formatMoney(38.75, 'GTQ')).toBe('Q39')
     expect(money(11, 'MXN')).toBe('MX$187')
