@@ -30,6 +30,7 @@ import HistoryChart from './HistoryChart'
 import StripePaymentForm from './StripePaymentForm'
 import Confirmation from './Confirmation'
 import Link from 'next/link'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 export interface DetailBundle {
   slug: string
@@ -77,6 +78,7 @@ export default function ContractCheckout({
   initial,
   watchingCapacity,
 }: Props) {
+  const fx = useFxRates()
   const t = useTranslations()
   const locale = useLocale() as Locale
   const router = useRouter()
@@ -122,16 +124,16 @@ export default function ContractCheckout({
   const price = tier ? quotes[tier.id] : null
 
   const tierOptions: TierOption[] = tiers.map((x) => {
-    const payout = money(x.payout_usd, currency)
+    const payout = money(x.payout_usd, currency, fx)
     const locked = proLocked(x)
     return {
       id: x.id,
       title: x.max_payouts > 1 ? t('tiers.pro', { count: x.max_payouts }) : t('tiers.basic'),
       explain:
         x.max_payouts > 1
-          ? t('tiers.proExplain', { total: money(x.payout_usd * x.max_payouts, currency), payout })
+          ? t('tiers.proExplain', { total: money(x.payout_usd * x.max_payouts, currency, fx), payout })
           : t('tiers.basicExplain', { payout }),
-      price: money(quotes[x.id], currency),
+      price: money(quotes[x.id], currency, fx),
       disabled: locked || !hasRoom(x),
       note: locked ? t('tiers.proLocked') : !hasRoom(x) && !noRoom ? t('detail.noCapacityTitle') : undefined,
     }
@@ -255,11 +257,11 @@ export default function ContractCheckout({
     )
   }
 
-  const priceLabel = price != null ? money(price, currency) : '—'
+  const priceLabel = price != null ? money(price, currency, fx) : '—'
   const payoutLabel = tier
     ? tier.max_payouts > 1
-      ? t('detail.receiveUpTo', { amount: money(tier.payout_usd * tier.max_payouts, currency) })
-      : money(tier.payout_usd, currency)
+      ? t('detail.receiveUpTo', { amount: money(tier.payout_usd * tier.max_payouts, currency, fx) })
+      : money(tier.payout_usd, currency, fx)
     : '—'
   const approx =
     price == null
@@ -267,7 +269,7 @@ export default function ContractCheckout({
       : currency !== 'USD'
         ? t('common.approx', { amount: formatMoney(price, 'USD') })
         : localCurrency
-          ? t('common.approx', { amount: money(price, localCurrency) })
+          ? t('common.approx', { amount: money(price, localCurrency, fx) })
           : null
   const caption = [t('common.chargedInUsd'), approx, dates].filter(Boolean).join(' · ')
   const canBuy = isOpen && !noRoom && !triggerActive && tier != null && (!isRecurring || periodDays != null)

@@ -10,6 +10,7 @@ import type { Locale } from '@/i18n/config'
 import { InsuMark } from '@/components/sereno/Logo'
 import { Eyebrow, DisplayTitle, emphasis } from '@/components/sereno/Typography'
 import { ButtonLink } from '@/components/sereno/Button'
+import { useFxRates } from '@/components/currency/FxRatesProvider'
 
 interface Props {
   contract: ContractWithTiers
@@ -33,6 +34,7 @@ export default function Confirmation({
   confirmation,
   currency,
 }: Props) {
+  const fx = useFxRates()
   const t = useTranslations()
   const locale = useLocale() as Locale
   const corridor = contract.corridor ?? null
@@ -49,8 +51,8 @@ export default function Confirmation({
 
   const receive =
     tier.max_payouts > 1
-      ? t('detail.receiveUpTo', { amount: money(tier.payout_usd * tier.max_payouts, currency) })
-      : money(tier.payout_usd, currency)
+      ? t('detail.receiveUpTo', { amount: money(tier.payout_usd * tier.max_payouts, currency, fx) })
+      : money(tier.payout_usd, currency, fx)
 
   const rows: [string, string][] = [
     [t('confirm.route'), contractName(contract, locale, t)],
@@ -83,7 +85,7 @@ export default function Confirmation({
         <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-border pt-4">
           <div>
             <dt className="text-eyebrow uppercase text-ink-muted">{t('confirm.paid')}</dt>
-            <dd className="mt-1 font-display text-amount text-ink">{money(pricePaidUsd, currency)}</dd>
+            <dd className="mt-1 font-display text-amount text-ink">{money(pricePaidUsd, currency, fx)}</dd>
           </div>
           <div>
             <dt className="text-eyebrow uppercase text-ink-muted">{t('confirm.receive')}</dt>

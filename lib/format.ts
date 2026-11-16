@@ -7,6 +7,7 @@ import { INTL_LOCALE, type Locale } from '@/i18n/config'
 import { formatMoney } from '@/lib/utils'
 import { convertFromUsd } from '@/lib/currency/resolve'
 import type { DisplayCurrency } from '@/lib/currency/config'
+import type { FxRates } from '@/lib/currency/rates'
 
 const TZ = 'America/Mexico_City'
 
@@ -56,8 +57,8 @@ export function marketDayOf(date: Date | string): string {
 }
 
 /** Authoritative USD amount → compact money in the display currency. */
-export function money(amountUsd: number, currency: DisplayCurrency): string {
-  return formatMoney(convertFromUsd(amountUsd, currency), currency)
+export function money(amountUsd: number, currency: DisplayCurrency, rates?: FxRates): string {
+  return formatMoney(convertFromUsd(amountUsd, currency, rates), currency)
 }
 
 /** "MX$23.45" / "Q31.69" — a reference price in its own market currency, 2 decimals. */

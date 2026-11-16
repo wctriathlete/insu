@@ -30,10 +30,17 @@ export function resolveDisplayCurrency(
   return localCurrencyForCountry(country) ?? 'USD'
 }
 
-/** Convert an authoritative USD amount into the target display currency. */
-export function convertFromUsd(amountUsd: number, currency: DisplayCurrency): number {
+/**
+ * Convert an authoritative USD amount into the target display currency. Pass the
+ * day's official rates (getFxRates / useFxRates); FX_RATES is only the fallback.
+ */
+export function convertFromUsd(
+  amountUsd: number,
+  currency: DisplayCurrency,
+  rates: Record<LocalCurrency, number> = FX_RATES,
+): number {
   if (currency === 'USD') return amountUsd
-  return Math.round(amountUsd * FX_RATES[currency])
+  return Math.round(amountUsd * rates[currency])
 }
 
 /**
@@ -47,8 +54,9 @@ export function displayPrice(
   amountUsd: number,
   mode: DisplayMode,
   country?: string | null,
+  rates: Record<LocalCurrency, number> = FX_RATES,
 ): { amount: number; currency: DisplayCurrency; formatted: string } {
   const currency = resolveDisplayCurrency(mode, country)
-  const amount = convertFromUsd(amountUsd, currency)
+  const amount = convertFromUsd(amountUsd, currency, rates)
   return { amount, currency, formatted: formatCurrency(amount, currency) }
 }
