@@ -56,10 +56,10 @@ describe('ProtectionCard (owned)', () => {
     expect(screen.queryByText(/urban/)).not.toBeInTheDocument()
   })
 
-  it('shows Pagaste · Recibes si pasa · Termina in the chosen currency', () => {
+  it('shows Pagaste · Recibes si se activa · Termina in the chosen currency', () => {
     render(<ProtectionCard position={makePosition()} displayMode="LOCAL" />)
     expect(screen.getByText('Pagaste').nextSibling).toHaveTextContent('MX$85')
-    expect(screen.getByText('Recibes si pasa').nextSibling).toHaveTextContent('MX$1,700')
+    expect(screen.getByText('Recibes si se activa').nextSibling).toHaveTextContent('MX$1,700')
     expect(screen.getByText('Termina')).toBeInTheDocument()
   })
 
@@ -82,8 +82,8 @@ describe('ProtectionCard (owned)', () => {
       },
     })
     render(<ProtectionCard position={position} displayMode="USD" />)
-    expect(screen.getByText(/Te pagamos desde 45 min de trayecto/)).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /Línea de pago 45 min/ })).toBeInTheDocument()
+    expect(screen.getByText(/Te pagamos si el trayecto pasa de 45 min/)).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /Límite de pago 45 min/ })).toBeInTheDocument()
   })
 
   it('marks Pro protections that already paid with the payout count', () => {
@@ -94,7 +94,7 @@ describe('ProtectionCard (owned)', () => {
     })
     render(<ProtectionCard position={position} displayMode="USD" />)
     expect(screen.getByText('1 pago')).toBeInTheDocument()
-    expect(screen.getByText('Recibes si pasa').nextSibling).toHaveTextContent('$200')
+    expect(screen.getByText('Recibes si se activa').nextSibling).toHaveTextContent('$200')
   })
 
   it('shows Terminada and hides the live box once expired', () => {
