@@ -27,15 +27,15 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Compact money for Sereno surfaces: "$5", "MX$85", "Q39". USD keeps a bare "$"
- * because every place money changes hands carries a "Se cobra en USD" caption;
- * pesos get "MX$" so the two can never be confused.
+ * Compact money for Sereno surfaces: "US$5", "MX$85", "Q39". In Mexico a bare
+ * "$" reads as pesos, and many surfaces (cards, dashboard, Respaldar) carry no
+ * "charged in USD" caption, so dollars are always marked "US$".
  */
 export function formatMoney(amount: number, currency: Currency = 'USD'): string {
   const rounded = Math.round(amount)
   const digits = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.abs(rounded))
   const sign = rounded < 0 ? '−' : ''
-  const symbol = currency === 'MXN' ? 'MX$' : currency === 'GTQ' ? 'Q' : '$'
+  const symbol = currency === 'MXN' ? 'MX$' : currency === 'GTQ' ? 'Q' : 'US$'
   return `${sign}${symbol}${digits}`
 }
 

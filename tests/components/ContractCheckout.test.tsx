@@ -101,7 +101,7 @@ describe('ContractCheckout', () => {
     expect(within(period).getByRole('radio', { name: '7 días' })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Básica · una vez/ })).toBeChecked()
     expect(screen.getByText('Pagas hoy')).toBeInTheDocument()
-    expect(screen.getByText('Recibes si pasa').nextSibling).toHaveTextContent('$100')
+    expect(screen.getByText('Recibes si se activa').nextSibling).toHaveTextContent('$100')
     expect(screen.getByText(/Se cobra en USD/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Proteger 7 días' })).toBeEnabled()
   })
@@ -110,7 +110,7 @@ describe('ContractCheckout', () => {
     renderCheckout()
     await userEvent.click(screen.getByRole('radio', { name: '1 día' }))
     expect(screen.getByRole('radio', { name: /Pro · hasta 3 veces/ })).toBeDisabled()
-    expect(screen.getAllByText('Pro está disponible desde 3 días de protección.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Pro está disponible para periodos de 3 días o más.').length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: 'Proteger 1 día' })).toBeEnabled()
   })
 
