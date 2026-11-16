@@ -3,6 +3,7 @@ import { priceTier } from './engine'
 import { dailyHazard, priceTenor, capacityFactor, recurringOracleMultiplier } from '@/lib/pricing/derivative'
 import { computeOracleMultiplier } from '@/lib/oracle/multiplier'
 import { periodMenuForContract } from '@/lib/pricing/tenors'
+import { convertFromUsd } from '@/lib/currency/resolve'
 import type { TriggerCondition } from '@/lib/oracle/trigger'
 import type { CoverageTier, Contract } from '@/lib/types'
 
@@ -70,6 +71,8 @@ async function applyReprice(
   await db.from('coverage_tiers')
     .update({
       premium_usd: premiumUsd,
+      // Keep the stored MXN figure in step: purchases copy it into premium_paid_mxn.
+      premium_mxn: convertFromUsd(premiumUsd, 'MXN'),
       last_priced_at: new Date().toISOString(),
       pricing_inputs: inputs,
     })

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, type Mock } from 'vitest'
 import { repriceAll, repriceTier } from '@/lib/pricing/reprice'
 import { dailyHazard, priceTenor, capacityFactor } from '@/lib/pricing/derivative'
+import { FX_RATES } from '@/lib/currency/config'
 
 interface MockDb {
   from: Mock
@@ -107,6 +108,13 @@ describe('repriceAll', () => {
     await repriceAll(db)
     expect(db._update).toHaveBeenCalledTimes(1)
     expect(db._updateEq).toHaveBeenCalledWith('id', 'tier-1')
+  })
+
+  it('keeps premium_mxn in sync with the new USD premium', async () => {
+    const db = makeDb()
+    await repriceAll(db)
+    const { premium_usd, premium_mxn } = db._update.mock.calls[0][0]
+    expect(premium_mxn).toBe(Math.round(premium_usd * FX_RATES.MXN))
   })
 
   it('inserts a pricing_history row for each tier', async () => {
